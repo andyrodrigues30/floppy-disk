@@ -1,0 +1,20 @@
+.settings-public-key {
+    width: 100%;
+    min-width: 300px;
+    max-width: 600px;
+    height: auto;
+    resize: vertical;
+    font-family: monospace;
+    padding: 4px 6px;
+    box-sizing: border-box;
+}
+
+.settings-add-device-btn-container {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.settings-add-device-btn {
+    background: var(--interactive-accent);
+}

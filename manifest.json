@@ -1,0 +1,10 @@
+{
+	"id": "floppy-disk",
+	"name": "Floppy Disk",
+	"version": "1.0.0",
+	"minAppVersion": "1.1.0",
+	"description": "Sync notes across devices securely and directly, tracking changes with Git-style conflict resolution.",
+	"author": "Andrea Rodrigues",
+	"authorUrl": "https://andrearodrigues.co.uk",
+	"isDesktopOnly": false
+}

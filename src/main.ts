@@ -1,14 +1,17 @@
 import { Notice, Plugin } from "obsidian";
 import { SnapshotManager } from "core/snapshot";
+import { WebRTCManager } from "core/webrtc";
 import { DEFAULT_SETTINGS } from "settings/defaults";
 import { FloppyDiskSettingsTab } from "settings/settings";
+import { syncVault } from "commands/syncVault";
 import { createThisDevice } from "utils/device";
-import { FloppyDiskSettings } from "types/settings";
 import { Device } from "types/device";
+import { FloppyDiskSettings } from "types/settings";
 
 export default class FloppyDiskPlugin extends Plugin {
   public settings!: FloppyDiskSettings;
   public snapshotManager!: SnapshotManager;
+  public webrtcManager!: WebRTCManager;
   settingsTab?: FloppyDiskSettingsTab;
 
   
@@ -37,6 +40,21 @@ export default class FloppyDiskPlugin extends Plugin {
     // create managers AFTER deviceId exists
     this.snapshotManager = new SnapshotManager(this.app, this.settings);
     await this.snapshotManager.ensureSnapshotExists();
+
+    this.webrtcManager = new WebRTCManager(this);
+
+    // ribbon icon
+    this.addRibbonIcon("dice", "Sync vault", async () => {
+      new Notice("Syncing vault...");
+      await syncVault(this.app, this.snapshotManager, this.webrtcManager);
+    });
+
+    // command
+    this.addCommand({
+      id: "sync-vault",
+      name: "Sync vault",
+      callback: async () => await syncVault(this.app, this.snapshotManager, this.webrtcManager),
+    });
   }
   
   onunload() {

@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS } from "settings/defaults";
 import { FloppyDiskSettingsTab } from "settings/settings";
 import { createThisDevice } from "utils/device";
 import { FloppyDiskSettings } from "types/settings";
+import { Device } from "types/device";
 
 export default class FloppyDiskPlugin extends Plugin {
   public settings!: FloppyDiskSettings;
@@ -52,5 +53,10 @@ export default class FloppyDiskPlugin extends Plugin {
       this.settings.deviceId = crypto.randomUUID();
       await this.saveSettings();
     }
+  }
+
+  // find a device by ID
+  public findDevice(deviceId: string): Device | undefined {
+    return Object.values(this.settings.trustedDevices).find(d => d.id === deviceId);
   }
 }

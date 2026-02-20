@@ -29,8 +29,15 @@ export default class FloppyDiskPlugin extends Plugin {
     // add settings tab
     this.settingsTab = new FloppyDiskSettingsTab(this.app, this);
     this.addSettingTab(this.settingsTab);
-  }
 
+    await this.ensureDeviceId();
+    this.settings.vaultId = this.app.vault.getName();
+    
+    // create managers AFTER deviceId exists
+    this.snapshotManager = new SnapshotManager(this.app, this.settings);
+    await this.snapshotManager.ensureSnapshotExists();
+  }
+  
   onunload() {
     new Notice("Floppy disk plugin unloaded");
   }
@@ -38,5 +45,12 @@ export default class FloppyDiskPlugin extends Plugin {
   public async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
     new Notice("Plugin settings updated");
+  }
+  
+  private async ensureDeviceId(): Promise<void> {
+    if (!this.settings.deviceId) {
+      this.settings.deviceId = crypto.randomUUID();
+      await this.saveSettings();
+    }
   }
 }

@@ -33,6 +33,8 @@ export default class FloppyDiskPlugin extends Plugin {
       deviceName: loaded?.deviceName ?? DEFAULT_SETTINGS.deviceName,
     };
 
+    // TODO: add sync update event function
+
     // commands
     registerCommands(this);
 

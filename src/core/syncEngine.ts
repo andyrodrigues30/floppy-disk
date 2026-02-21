@@ -147,7 +147,7 @@ export async function executeSync(
         }
     }
 
-    new Notice("Sync execution completed")
+    new Notice("Sync execution completed.")
 }
 
 function toArrayBuffer(buf: Uint8Array): ArrayBuffer {

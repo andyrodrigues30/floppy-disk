@@ -33,7 +33,7 @@ export class DeviceRow {
             .onClick(async (): Promise<void> => {
               await this.trustDevice(this.device.id);
               await this.plugin.saveSettings();
-              new Notice("Device trusted");
+              new Notice("Device trusted.");
               this.plugin.settingsTab?.display();
             })
         );
@@ -46,7 +46,7 @@ export class DeviceRow {
             .onClick(async (): Promise<void> => {
               await this.revokeDevice(this.device.id);
               await this.plugin.saveSettings();
-              new Notice("Trust revoked");
+              new Notice("Trust revoked.");
               this.plugin.settingsTab?.display();
             })
         );
@@ -62,7 +62,7 @@ export class DeviceRow {
             (d) => d.id !== this.device.id
           );
           await this.plugin.saveSettings();
-          new Notice("Device deleted");
+          new Notice("Device deleted.");
           this.plugin.settingsTab?.display();
         })
     );
@@ -72,7 +72,7 @@ export class DeviceRow {
   private async trustDevice(deviceId: string): Promise<void> {
     const device = this.plugin.findDevice(deviceId);
     if (!device) {
-      new Notice("Device not found");
+      new Notice("Device not found.");
       return;
     }
 
@@ -83,14 +83,14 @@ export class DeviceRow {
 
     this.plugin.settings.trustedDevices[deviceId] = trusted;
     await this.plugin.saveSettings();
-    new Notice(`Device trusted: ${device.name ?? device.id}`);
+    new Notice(`Device trusted: ${device.name ?? device.id}.`);
   }
 
   // revoke a device
   private async revokeDevice(deviceId: string): Promise<void> {
     const device = this.plugin.findDevice(deviceId);
     if (!device) {
-      new Notice("Device not found");
+      new Notice("Device not found.");
       return;
     }
 
@@ -101,19 +101,19 @@ export class DeviceRow {
 
     this.plugin.settings.trustedDevices[deviceId] = revoked;
     await this.plugin.saveSettings();
-    new Notice(`Trust revoked for device: ${device.name ?? device.id}`);
+    new Notice(`Trust revoked for device: ${device.name ?? device.id}.`);
   }
 
   // TODO: use
   // remove a device entirely
   private async removeDevice(deviceId: string): Promise<void> {
     if (!this.plugin.settings.trustedDevices[deviceId]) {
-      new Notice("Device not found");
+      new Notice("Device not found.");
       return;
     }
 
     delete this.plugin.settings.trustedDevices[deviceId];
     await this.plugin.saveSettings();
-    new Notice(`Device removed: ${deviceId}`);
+    new Notice(`Device removed: ${deviceId}.`);
   }
 }

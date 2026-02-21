@@ -12,3 +12,23 @@ export interface SyncPlan {
   deletes: SyncAction[]
   conflicts: SyncAction[]
 }
+
+export type SyncPhase =
+  | "idle"
+  | "handshake"
+  | "comparing"
+  | "uploading"
+  | "downloading"
+  | "conflict"
+  | "complete"
+  | "error";
+
+export interface SyncProgress {
+  phase: SyncPhase;
+  totalFiles: number;
+  processedFiles: number;
+  currentFile?: string;
+  uploads: string[];
+  downloads: string[];
+  conflicts: string[];
+}

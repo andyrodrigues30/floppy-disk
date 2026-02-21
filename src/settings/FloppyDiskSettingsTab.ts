@@ -56,7 +56,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
           .setButtonText("Copy")
           .onClick((): void => {
             void navigator.clipboard.writeText(device.id);
-            new Notice("Device ID copied");
+            new Notice("Device ID copied.");
           })
       )
 
@@ -68,7 +68,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
           .setButtonText("Copy")
           .onClick((): void => {
             void navigator.clipboard.writeText(device.publicKey);
-            new Notice("Public key copied");
+            new Notice("Public key copied.");
           })
       );
 
@@ -86,7 +86,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
           .onClick(async (): Promise<void> => {
             await this.regenerateKeys();
             await this.plugin.saveSettings();
-            new Notice("Keys regenerated");
+            new Notice("Keys regenerated.");
             this.display();
           })
       );
@@ -103,12 +103,12 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
           .setButtonText("Add device")
           .onClick(async (): Promise<void> => {
             if (!publicKey || !deviceId) {
-              new Notice("Public key required");
+              new Notice("Public key required.");
               return;
             }
             await this.addDevice(deviceId, publicKey);
             await this.plugin.saveSettings();
-            new Notice("Device added (pending)");
+            new Notice("Device added (pending).");
             this.display();
           })
       );
@@ -173,7 +173,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
     const existing = this.plugin.findDevice(deviceId);
     if (existing) {
-      new Notice("Device already exists");
+      new Notice("Device already exists.");
       return;
     }
 
@@ -190,10 +190,10 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
     this.plugin.settings.trustedDevices[deviceId] = newDevice;
     await this.plugin.saveSettings();
-    new Notice(`Device added: ${name ?? deviceId} (${trustStatus})`);
+    new Notice(`Device added: ${name ?? deviceId} (${trustStatus}).`);
   }
 
-  private async regenerateKeys(): Promise<void> {
+  public async regenerateKeys(): Promise<void> {
     if (!this.plugin.settings.thisDevice) return;
 
     // generate new key pairs
@@ -215,7 +215,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
       privateKey: newKeys.signingKeyPair.privateKey,
     };
 
-    new Notice("Keys regenerated");
+    new Notice("Keys regenerated.");
     await this.plugin.saveSettings();
   }
 }

@@ -1,6 +1,6 @@
 import { App, Notice, TFile } from "obsidian"
-import { WebRTCManager } from "./webrtc"
-import { SnapshotManager } from "./snapshot"
+import { WebRTCManager } from "./WebRTCManager"
+import { SnapshotManager } from "./SnapshotManager"
 import { FloppyDiskCrypto } from "utils/cryptoHelper"
 import { SyncAction, SyncPlan } from "types/sync"
 import { Snapshot } from "types/snapshot"

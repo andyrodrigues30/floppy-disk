@@ -1,6 +1,6 @@
 import { Notice, Plugin } from "obsidian";
-import { SnapshotManager } from "core/snapshot";
-import { WebRTCManager } from "core/webrtc";
+import { SnapshotManager } from "core/SnapshotManager";
+import { WebRTCManager } from "core/WebRTCManager";
 import { DEFAULT_SETTINGS } from "settings/defaults";
 import { FloppyDiskSettingsTab } from "settings/settings";
 import { syncVault } from "commands/syncVault";

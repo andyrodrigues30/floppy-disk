@@ -1,7 +1,7 @@
 import { App, Notice } from "obsidian";
-import { SnapshotManager } from "core/snapshot";
+import { SnapshotManager } from "core/SnapshotManager";
 import { createSyncPlan, executeSync } from "core/syncEngine";
-import { WebRTCManager } from "core/webrtc";
+import { WebRTCManager } from "core/WebRTCManager";
 import { Manifest } from "types/manifest";
 
 export async function syncVault(

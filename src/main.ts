@@ -2,7 +2,7 @@ import { Notice, Plugin } from "obsidian";
 import { SnapshotManager } from "core/SnapshotManager";
 import { WebRTCManager } from "core/WebRTCManager";
 import { DEFAULT_SETTINGS } from "settings/defaults";
-import { FloppyDiskSettingsTab } from "settings/settings";
+import { FloppyDiskSettingsTab } from "settings/FloppyDiskSettingsTab";
 import { syncVault } from "commands/syncVault";
 import { createThisDevice } from "utils/device";
 import { Device } from "types/device";

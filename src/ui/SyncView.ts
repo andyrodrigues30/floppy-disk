@@ -40,7 +40,10 @@ export class SyncView extends ItemView {
 
     const progress = this.plugin.syncProgress;
 
-    contentEl.createEl("h2", { text: "Sync status" });
+    const syncHeaderDiv = contentEl.createEl("div", { cls: "sync-header" });
+    syncHeaderDiv.createEl("h2", { text: "Sync status" });
+    syncHeaderDiv.createEl("button", { text: "Refresh" })
+    syncHeaderDiv.onClickEvent(() => this.render());
 
     // Phase
     contentEl.createEl("div", {
@@ -53,8 +56,8 @@ export class SyncView extends ItemView {
       progress.totalFiles === 0
         ? 0
         : Math.round(
-            (progress.processedFiles / progress.totalFiles) * 100
-          );
+          (progress.processedFiles / progress.totalFiles) * 100
+        );
 
     const barContainer = contentEl.createDiv("sync-bar-container");
     const bar = barContainer.createDiv("sync-bar");

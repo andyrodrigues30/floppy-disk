@@ -19,6 +19,12 @@
     background: var(--interactive-accent);
 }
 
+.sync-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .sync-bar-container {
   width: 100%;
   height: 10px;

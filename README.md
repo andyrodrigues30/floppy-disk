@@ -1,7 +1,7 @@
 # Floppy Disk
 > An Obsidian plugin allowing you to sync your notes, track changes, and manage trusted devices.
 
-Floppy Disk keeps your data private while letting you synchronize effortlessly across your own devices, transferring encrypted data using peer-to-peer WebRTC connections,  end-to-end encryption and real-time file transfers across devices securely and directly, without relying on cloud services.
+Floppy Disk keeps your data private while allowing you synchronize your vault effortlessly across your own devices, transferring encrypted data using peer-to-peer WebRTC connections, end-to-end encryption and real-time file transfers across devices securely and directly, without relying on cloud services.
 
 ## Features
 **Device Management**

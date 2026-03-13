@@ -1,4 +1,4 @@
-import { TFile } from "obsidian"
+import { Notice, TFile } from "obsidian"
 import FloppyDiskPlugin from "main"
 import { generateManifest } from "./manifest"
 import { FloppyDiskCrypto } from "utils/cryptoHelper"
@@ -11,7 +11,8 @@ import {
     FileChunkMessage,
     HandshakeMessage,
     HandshakeAckMessage,
-    FileCompleteMessage
+    FileCompleteMessage,
+    TrustRequestMessage
 } from "types/messages"
 import {
     isConflictNotificationMessage,
@@ -21,7 +22,8 @@ import {
     isHandshakeAckMessage,
     isHandshakeMessage,
     isManifestResponseMessage,
-    isRequestManifestMessage
+    isRequestManifestMessage,
+    isTrustRequestMessage
 } from "utils/messageGuards"
 
 const CHUNK_SIZE = 64 * 1024;
@@ -82,6 +84,8 @@ export class WebRTCManager {
                     await this.handleHandshake(parsed)
                 } else if (isHandshakeAckMessage(parsed)) {
                     console.warn("Handshake ack from", deviceId, parsed.accepted)
+                } else if (isTrustRequestMessage(parsed)) {
+                    await this.handleTrustRequest(parsed);
                 } else {
                     console.warn("Unknown message received", parsed)
                 }
@@ -96,23 +100,23 @@ export class WebRTCManager {
     // generate local manifest
     public async generateLocalManifest(): Promise<Manifest> {
         if (!this.plugin.snapshotManager) {
-            throw new Error("WebRTCManager: snapshotManager not initialized")
+            throw new Error("WebRTCManager: snapshotManager not initialized");
         }
 
-        const snapshot = await this.plugin.snapshotManager.loadSnapshot()
-        let deviceId: string
+        // Device ID should come from plugin settings (single source of truth)
+        const deviceId: string = this.plugin.settings.thisDevice.id;
 
-        if (snapshot.currentDeviceId) {
-            deviceId = snapshot.currentDeviceId
-        } else {
-            // register the current device and get the id
-            await this.plugin.snapshotManager.registerCurrentDevice()
-            deviceId = snapshot.currentDeviceId!
+        if (!deviceId) {
+            throw new Error("Current device ID is missing in settings");
         }
 
-        const vaultId = this.plugin.app.vault.getName()
+        const vaultId: string = this.plugin.app.vault.getName();
 
-        return generateManifest(this.plugin.app, vaultId, deviceId)
+        return generateManifest(
+            this.plugin.app,
+            vaultId,
+            deviceId
+        );
     }
 
     public async requestRemoteManifest(deviceId: string): Promise<Manifest> {
@@ -162,39 +166,60 @@ export class WebRTCManager {
         this.sendMessage(deviceId, msg)
     }
 
-    private async handleHandshake(msg: HandshakeMessage) {
-        console.warn("Received handshake from", msg.deviceId)
+    private async handleHandshake(msg: HandshakeMessage): Promise<void> {
+        console.warn("received handshake from", msg.deviceId);
 
-        let accepted = false
+        let accepted = false;
 
         try {
-            // convert incoming device signature from ArrayBuffer
-            const payload = new TextEncoder().encode(msg.deviceId)
+            // validate incoming public key format
+            if (!msg.publicKey) {
+                throw new Error("missing public key in handshake");
+            }
 
-            const remotePublicKey = await crypto.subtle.importKey(
+            // convert base64 jwk string back to object
+            const jwk: JsonWebKey = JSON.parse(atob(msg.publicKey));
+
+            // import remote signing key
+            const remotePublicKey: CryptoKey = await crypto.subtle.importKey(
                 "jwk",
-                msg.publicKey,
+                jwk,
                 { name: "ECDSA", namedCurve: "P-256" },
                 true,
                 ["verify"]
-            )
+            );
 
-            accepted = await this.verifySignature(remotePublicKey, payload.buffer, msg.signature)
+            // verify against fingerprint (consistent identity proof)
+            const encoder = new TextEncoder();
+            const data: ArrayBuffer = encoder.encode(msg.fingerprint).buffer;
+
+            const signature: ArrayBuffer = new Uint8Array(msg.signature).buffer;
+
+            accepted = await this.verifySignature(
+                remotePublicKey,
+                data,
+                signature
+            );
 
             if (accepted) {
-                console.warn("Handshake verified. Device trusted:", msg.deviceId)
-                await this.registerTrustedDevice(msg.deviceId, msg.publicKey)
+                console.warn("handshake verified. device trusted:", msg.deviceId);
+
+                await this.updateTrustedDevice(msg.deviceId, msg.publicKey);
             } else {
-                console.warn("Handshake signature invalid from device:", msg.deviceId)
+                console.warn("handshake signature invalid:", msg.deviceId);
             }
 
         } catch (err) {
-            console.error("Error verifying handshake:", err)
+            console.error("error verifying handshake:", err);
         }
 
-        // reply with ack
-        const ack: HandshakeAckMessage = { type: "HANDSHAKE_ACK", accepted }
-        this.sendMessage(msg.deviceId, ack)
+        // send acknowledgement
+        const ack: HandshakeAckMessage = {
+            type: "HANDSHAKE_ACK",
+            accepted
+        };
+
+        this.sendMessage(msg.deviceId, ack);
     }
 
     public async performHandshake(remoteDeviceId: string): Promise<boolean> {
@@ -234,7 +259,7 @@ export class WebRTCManager {
                     deviceId: this.plugin.settings.thisDevice.id,
                     fingerprint: this.plugin.settings.thisDevice.fingerprint,
                     signature: Array.from(new Uint8Array(signature)), // send as array
-                    publicKey: this.plugin.settings.thisDevice.signingKeyPair.publicKey,
+                    publicKey: this.plugin.settings.thisDevice.publicKey,
                 };
                 channel.send(JSON.stringify(handshakeMsg));
             };
@@ -286,26 +311,79 @@ export class WebRTCManager {
         )
     }
 
-    // register a trusted device in SnapshotManager
-    private async registerTrustedDevice(deviceId: string, publicKey: JsonWebKey) {
-        const snapshot = await this.plugin.snapshotManager.loadSnapshot()
-        const now = Date.now()
+
+    private async updateTrustedDevice(
+        deviceId: string,
+        publicKey: string
+    ): Promise<void> {
+
+        // update settings trust status
+        const device = this.plugin.settings.devices.find(
+            d => d.id === deviceId
+        );
+
+        if (device) {
+            device.trustStatus = "trusted";
+            device.publicKey = JSON.stringify(publicKey);
+        }
+
+        await this.plugin.saveSettings();
+
+        // update snapshot metadata
+        if (!this.plugin.snapshotManager) return;
+
+        const snapshot = await this.plugin.snapshotManager.loadSnapshot();
+        const now = Date.now();
+
+        const publicKeyString = JSON.stringify(publicKey);
 
         if (!snapshot.devices[deviceId]) {
             snapshot.devices[deviceId] = {
                 deviceId,
-                name: deviceId,
+                name: device?.name ?? deviceId,
                 lastSeen: now,
                 lastSyncedAt: 0,
                 files: {},
-                publicKey
-            }
+                publicKey: publicKeyString
+            };
         } else {
-            snapshot.devices[deviceId].publicKey = publicKey
-            snapshot.devices[deviceId].lastSeen = now
+            snapshot.devices[deviceId].lastSeen = now;
+            snapshot.devices[deviceId].publicKey = publicKeyString;
         }
 
-        await this.plugin.snapshotManager.saveSnapshot()
+        await this.plugin.snapshotManager.saveSnapshot();
+    }
+
+    private async handleTrustRequest(msg: TrustRequestMessage): Promise<void> {
+        console.warn("received trust request from", msg.deviceId);
+
+        if (!msg.publicKey) return;
+
+        const now = Date.now();
+
+        const devices = this.plugin.settings.devices;
+
+        const existing = devices.find(d => d.id === msg.deviceId);
+
+        const updatedDevice = {
+            id: msg.deviceId,
+            name: msg.deviceName ?? msg.deviceId,
+            publicKey: msg.publicKey,
+            fingerprint: msg.fingerprint,
+            addedAt: existing?.addedAt ?? now,
+            trustStatus: "trusted" as const
+        };
+
+        if (!existing) {
+            devices.push(updatedDevice);
+        } else {
+            const index = devices.findIndex(d => d.id === msg.deviceId);
+            devices[index] = updatedDevice;
+        }
+
+        await this.plugin.saveSettings();
+
+        new Notice("Device automatically trusted");
     }
 
     public async sendFileInChunks(deviceId: string, path: string) {

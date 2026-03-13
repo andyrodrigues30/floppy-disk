@@ -103,7 +103,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
           .setButtonText("Add device")
           .onClick(async (): Promise<void> => {
             if (!publicKey || !deviceId) {
-              new Notice("Public key required.");
+              new Notice("Device ID and Public Key required.");
               return;
             }
             await this.addDevice(deviceId, publicKey);
@@ -167,7 +167,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     deviceId: string,
     publicKey: string,
     name?: string,
-    outgoing: boolean = false
+    outgoing: boolean = true
   ): Promise<void> {
     if (!publicKey) throw new Error("Public key is required");
 

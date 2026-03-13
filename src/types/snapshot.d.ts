@@ -10,7 +10,7 @@ export interface DeviceSnapshot {
   lastSeen: number
   lastSyncedAt: number
   files: Record<string, SnapshotEntry>
-  publicKey?: JsonWebKey
+  publicKey?: string
 }
 
 export interface SnapshotEntry {

@@ -16,7 +16,7 @@ export interface ThisDevice extends DeviceKeys {
 // base device for all remote devices
 export interface BaseDevice {
   readonly id: string;
-  readonly publicKey: string;
+  publicKey: string;
   readonly fingerprint: string;
   readonly addedAt: number;
   name?: string;

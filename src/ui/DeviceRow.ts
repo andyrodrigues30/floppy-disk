@@ -1,6 +1,7 @@
 import { Setting, Notice } from "obsidian";
 import FloppyDiskPlugin from "../main";
 import { Device, RevokedDevice, TrustedDevice } from "types/device";
+import { PairDeviceModal } from "./PairDeviceModal";
 
 export class DeviceRow {
   private plugin: FloppyDiskPlugin;
@@ -25,19 +26,7 @@ export class DeviceRow {
 
   private renderActions(setting: Setting): void {
     switch (this.device.trustStatus) {
-      case "pending-incoming":
-        setting.addButton((btn) =>
-          btn
-            .setCta()
-            .setButtonText("Trust")
-            .onClick(async (): Promise<void> => {
-              await this.trustDevice(this.device.id);
-              await this.plugin.saveSettings();
-              new Notice("Device trusted.");
-              this.plugin.settingsTab?.display();
-            })
-        );
-        break;
+
       case "trusted":
         setting.addButton((btn) =>
           btn
@@ -51,39 +40,33 @@ export class DeviceRow {
             })
         );
         break;
+
+      default:
+        // add pair button for non-trusted devices
+        setting.addButton((btn) =>
+          btn
+            .setCta()
+            .setButtonText("Pair")
+            .onClick(() => {
+              new PairDeviceModal(
+                this.plugin.app,
+                this.plugin.webrtcManager,
+                this.device.id
+              ).open();
+            })
+        );
+        break;
     }
 
+    // delete button (always visible)
     setting.addExtraButton((btn) =>
       btn
         .setIcon("trash")
         .setTooltip("Delete device")
         .onClick(async (): Promise<void> => {
-          this.plugin.settings.devices = this.plugin.settings.devices.filter(
-            (d) => d.id !== this.device.id
-          );
-          await this.plugin.saveSettings();
-          new Notice("Device deleted.");
-          this.plugin.settingsTab?.display();
+          this.removeDevice(this.device.id)
         })
     );
-  }
-
-  // trust a device
-  private async trustDevice(deviceId: string): Promise<void> {
-    const device = this.plugin.findDevice(deviceId);
-    if (!device) {
-      new Notice("Device not found.");
-      return;
-    }
-
-    const trusted: TrustedDevice = {
-      ...device,
-      trustStatus: "trusted",
-    };
-
-    this.plugin.settings.trustedDevices[deviceId] = trusted;
-    await this.plugin.saveSettings();
-    new Notice(`Device trusted: ${device.name ?? device.id}.`);
   }
 
   // revoke a device
@@ -104,7 +87,6 @@ export class DeviceRow {
     new Notice(`Trust revoked for device: ${device.name ?? device.id}.`);
   }
 
-  // TODO: use
   // remove a device entirely
   private async removeDevice(deviceId: string): Promise<void> {
     if (!this.plugin.settings.trustedDevices[deviceId]) {
@@ -112,8 +94,12 @@ export class DeviceRow {
       return;
     }
 
-    delete this.plugin.settings.trustedDevices[deviceId];
+    this.plugin.settings.devices = this.plugin.settings.devices.filter(
+      (d) => d.id !== this.device.id
+    );
+
     await this.plugin.saveSettings();
-    new Notice(`Device removed: ${deviceId}.`);
+    new Notice("Device deleted.");
+    this.plugin.settingsTab?.display();
   }
 }

@@ -219,26 +219,31 @@ export class WebRTCManager {
     }
 
     public async performHandshake(remoteDeviceId: string): Promise<boolean> {
-        // find the remote device
-        const remoteDevice: Device | undefined = this.plugin.findDevice(remoteDeviceId);
+        const remoteDevice: Device | undefined =
+            this.plugin.findDevice(remoteDeviceId);
+
         if (!remoteDevice) {
             console.warn(`Handshake failed: device ${remoteDeviceId} not found`);
             return false;
         }
 
+        const connection = new RTCPeerConnection();
+        const channel = connection.createDataChannel("handshake");
+
+        const remote: RemoteDevice = {
+            device: remoteDevice,
+            connection,
+            channel,
+        };
+
+        this.remoteDevices.set(remoteDeviceId, remote);
+
         try {
-            const connection: RTCPeerConnection = new RTCPeerConnection();
-            const channel: RTCDataChannel = connection.createDataChannel("handshake");
-
-            const remote: RemoteDevice = {
-                device: remoteDevice,
-                connection,
-                channel,
-            };
-            this.remoteDevices.set(remoteDeviceId, remote);
-
             channel.onopen = async () => {
-                const payload = new TextEncoder().encode(this.plugin.settings.thisDevice.fingerprint);
+                const payload = new TextEncoder().encode(
+                    this.plugin.settings.thisDevice.fingerprint
+                );
+
                 const signature = await FloppyDiskCrypto.signData(
                     this.plugin.settings.thisDevice.signingKeyPair.privateKey,
                     payload.buffer
@@ -248,25 +253,23 @@ export class WebRTCManager {
                     type: "HANDSHAKE",
                     deviceId: this.plugin.settings.thisDevice.id,
                     fingerprint: this.plugin.settings.thisDevice.fingerprint,
-                    signature: Array.from(new Uint8Array(signature)), // send as array
+                    signature: Array.from(new Uint8Array(signature)),
                     publicKey: this.plugin.settings.thisDevice.publicKey,
                 };
+
                 channel.send(JSON.stringify(handshakeMsg));
             };
 
-            const handshakeConfirmed: boolean = await new Promise<boolean>((resolve) => {
+            const handshakeConfirmed = await new Promise<boolean>((resolve) => {
                 channel.onmessage = (ev: MessageEvent) => {
                     try {
                         if (typeof ev.data !== "string") return;
-                        const data: unknown = JSON.parse(ev.data);
 
-                        // runtime type check
+                        const data = JSON.parse(ev.data);
+
                         if (
-                            typeof data === "object" &&
-                            data !== null &&
-                            (data as HandshakeAckMessage).type === "HANDSHAKE_ACK" &&
-                            typeof (data as HandshakeAckMessage).accepted === "boolean" &&
-                            (data as HandshakeAckMessage).accepted === true
+                            data?.type === "HANDSHAKE_ACK" &&
+                            data?.accepted === true
                         ) {
                             resolve(true);
                         }
@@ -275,15 +278,124 @@ export class WebRTCManager {
                     }
                 };
 
-                // optional timeout
                 setTimeout(() => resolve(false), 10000);
             });
 
+            if (!handshakeConfirmed) {
+                this.remoteDevices.delete(remoteDeviceId);
+                connection.close();
+            }
 
             return handshakeConfirmed;
+
         } catch (err) {
             console.error("Handshake error:", err);
+            this.remoteDevices.delete(remoteDeviceId);
+            connection.close();
             return false;
+        }
+    }
+
+    public async createPairingOffer(remoteDeviceId: string): Promise<string> {
+
+        const remoteDevice = this.plugin.findDevice(remoteDeviceId)
+
+        if (!remoteDevice) {
+            throw new Error("Device not found")
+        }
+
+        const connection = new RTCPeerConnection()
+
+        const channel = connection.createDataChannel("sync")
+
+        this.remoteDevices.set(remoteDeviceId, {
+            device: remoteDevice,
+            connection,
+            channel
+        })
+
+        const offer = await connection.createOffer()
+
+        await connection.setLocalDescription(offer)
+
+        return JSON.stringify({
+            type: "PAIR_OFFER",
+            offer: connection.localDescription
+        })
+    }
+
+    public async acceptPairingOffer(
+        remoteDeviceId: string,
+        offerJSON: string
+    ): Promise<string> {
+
+        const parsed = JSON.parse(offerJSON)
+
+        if (parsed.type !== "PAIR_OFFER") {
+            throw new Error("Invalid pairing offer")
+        }
+
+        const remoteDevice = this.plugin.findDevice(remoteDeviceId)
+
+        if (!remoteDevice) {
+            throw new Error("Device not found")
+        }
+
+        const connection = new RTCPeerConnection()
+
+        connection.ondatachannel = (event) => {
+
+            const channel = event.channel
+
+            this.remoteDevices.set(remoteDeviceId, {
+                device: remoteDevice,
+                connection,
+                channel
+            })
+
+            channel.onopen = () => {
+                console.log("WebRTC channel open")
+            }
+
+        }
+
+        await connection.setRemoteDescription(parsed.offer)
+
+        const answer = await connection.createAnswer()
+
+        await connection.setLocalDescription(answer)
+
+        return JSON.stringify({
+            type: "PAIR_ANSWER",
+            answer: connection.localDescription
+        })
+    }
+
+    public async completePairing(
+        remoteDeviceId: string,
+        answerJSON: string
+    ): Promise<void> {
+
+        const parsed = JSON.parse(answerJSON)
+
+        if (parsed.type !== "PAIR_ANSWER") {
+            throw new Error("Invalid pairing answer")
+        }
+
+        const remote = this.remoteDevices.get(remoteDeviceId)
+
+        if (!remote) {
+            throw new Error("Connection not initialised")
+        }
+
+        await remote.connection.setRemoteDescription(parsed.answer)
+
+        remote.channel.onopen = async () => {
+
+            console.log("Connection established")
+
+            await this.performHandshake(remoteDeviceId)
+
         }
     }
 
@@ -300,7 +412,6 @@ export class WebRTCManager {
             data
         )
     }
-
 
     private async updateTrustedDevice(
         deviceId: string,

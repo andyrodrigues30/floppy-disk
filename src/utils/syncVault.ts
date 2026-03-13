@@ -15,11 +15,7 @@ export async function syncVault(
     const snapshot = await snapshotManager.loadSnapshot();
 
     try {
-        const trusted = await webrtcManager.performHandshake(remoteDeviceId);
-        if (!trusted) {
-            new Notice(`Device ${remoteDeviceId} not trusted. Aborting sync.`);
-            return;
-        }
+        await webrtcManager.performHandshake(remoteDeviceId);
     } catch (err) {
         console.error("Handshake failed:", err);
         new Notice(`Handshake with ${remoteDeviceId} failed.`);

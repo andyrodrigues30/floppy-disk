@@ -1,8 +1,4 @@
-import { Device, PendingIncomingDevice, PendingOutgoingDevice, RevokedDevice, TrustedDevice } from "types/device";
-
-export function isPendingDevice(device: Device): device is PendingIncomingDevice | PendingOutgoingDevice {
-    return device.trustStatus === "pending-incoming" || device.trustStatus === "pending-outgoing";
-}
+import { Device, RevokedDevice, TrustedDevice } from "types/device";
 
 export function isTrustedDevice(device: Device): device is TrustedDevice {
     return device.trustStatus === "trusted";

@@ -1,7 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import FloppyDiskPlugin from "main";
 import { FloppyDiskCrypto } from "utils/cryptoHelper";
-import { isTrustedDevice } from "utils/deviceGuards";
 import { DeviceRow } from "ui/DeviceRow";
 import { Device } from "types/device";
 
@@ -23,10 +22,10 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
     // add device section
     this.renderAddDevice(containerEl);
-    
+
     // trusted devices
-    new Setting(containerEl).setName("Trusted devices").setHeading();
-    this.renderTrustedDevices(containerEl);
+    new Setting(containerEl).setName("Devices").setHeading();
+    this.renderDevices(containerEl);
   }
 
   private renderCurrentDevice(containerEl: HTMLElement): void {
@@ -131,29 +130,15 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
       })
   }
 
-  private renderPendingDevices(containerEl: HTMLElement): void {
-    const pending: Device[] = this.plugin.settings.devices.filter(isPendingDevice);
+  private renderDevices(containerEl: HTMLElement): void {
+    const devices: Device[] = this.plugin.settings.devices;
 
-    if (!pending.length) {
-      new Setting(containerEl).setDesc("No pending devices.");
+    if (!devices.length) {
+      new Setting(containerEl).setDesc("No devices yet.");
       return;
     }
 
-    pending.forEach((device) => {
-      new DeviceRow(containerEl, this.plugin, device).render();
-    });
-  }
-
-  private renderTrustedDevices(containerEl: HTMLElement): void {
-    const trusted: Device[] =
-      this.plugin.settings.devices.filter(isTrustedDevice);
-
-    if (!trusted.length) {
-      new Setting(containerEl).setDesc("No trusted devices yet.");
-      return;
-    }
-
-    trusted.forEach((device) => {
+    devices.forEach((device) => {
       new DeviceRow(containerEl, this.plugin, device).render();
     });
   }
@@ -210,5 +195,11 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     };
 
     await this.plugin.saveSettings();
+  }
+
+  public getDeviceStatus(device: Device) {
+    if (device.trustStatus === "revoked") return "Revoked";
+    if (device.trustStatus === "trusted") return "Trusted";
+    return "Added";
   }
 }

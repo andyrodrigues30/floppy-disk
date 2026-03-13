@@ -41,25 +41,28 @@ export class PairDeviceModal extends Modal {
 
     new Setting(contentEl)
       .addButton(btn =>
-        btn.setButtonText("Submit")
+        btn
+          .setButtonText("Submit")
           .setCta()
           .onClick(async () => {
             try {
-              const parsed = JSON.parse(input);
+              const parsed = JSON.parse(input.trim());
 
-              if (parsed.type === "PAIR_OFFER") {
-                const answer =
-                  await this.webrtc.acceptPairingOffer(this.deviceId, input);
+              if (parsed?.type === "PAIR_OFFER") {
+                const answer = await this.webrtc.acceptPairingOffer(parsed);
 
                 await navigator.clipboard.writeText(answer);
                 new Notice("Answer copied");
+                return;
               }
 
-              if (parsed.type === "PAIR_ANSWER") {
-                await this.webrtc.completePairing(this.deviceId, input);
+              if (parsed?.type === "PAIR_ANSWER") {
+                await this.webrtc.completePairing(parsed);
                 new Notice("Pairing complete");
+                return;
               }
 
+              new Notice("Invalid pairing code");
             } catch {
               new Notice("Invalid pairing code");
             }

@@ -23,6 +23,7 @@ import {
     isManifestResponseMessage,
     isRequestManifestMessage,
 } from "utils/messageGuards"
+import { PairingAnswerMessage, PairingOfferMessage } from "types/pairing"
 
 const CHUNK_SIZE = 64 * 1024;
 
@@ -299,16 +300,16 @@ export class WebRTCManager {
     public async createPairingOffer(): Promise<string> {
         const connection = new RTCPeerConnection();
 
-        // Optional: store temporarily without remote device
+        // Create data channel (offerer must create it)
         const channel = connection.createDataChannel("pairing");
 
-        // Store using a temporary key (not remoteDeviceId yet)
-        const tempId = crypto.randomUUID();
+        // Store temporarily (no device yet)
+        const sessionId = crypto.randomUUID();
 
-        this.remoteDevices.set(tempId, {
-            device: null as any, // not known yet
+        this.remoteDevices.set(sessionId, {
+            device: null as any,
             connection,
-            channel
+            channel,
         });
 
         const offer = await connection.createOffer();
@@ -320,81 +321,59 @@ export class WebRTCManager {
         });
     }
 
-    public async acceptPairingOffer(
-        remoteDeviceId: string,
-        offerJSON: string
-    ): Promise<string> {
-
-        const parsed = JSON.parse(offerJSON)
-
-        if (parsed.type !== "PAIR_OFFER") {
-            throw new Error("Invalid pairing offer")
+    public async acceptPairingOffer(offerMessage: PairingOfferMessage): Promise<string> {
+        if (!offerMessage?.offer) {
+            throw new Error("Invalid pairing offer");
         }
 
-        const remoteDevice = this.plugin.findDevice(remoteDeviceId)
+        const connection = new RTCPeerConnection();
 
-        if (!remoteDevice) {
-            throw new Error("Device not found")
-        }
-
-        const connection = new RTCPeerConnection()
-
+        // listen for data channel from offerer
         connection.ondatachannel = (event) => {
+            const channel = event.channel;
 
-            const channel = event.channel
+            const sessionId = crypto.randomUUID();
 
-            this.remoteDevices.set(remoteDeviceId, {
-                device: remoteDevice,
+            this.remoteDevices.set(sessionId, {
+                device: null as any,
                 connection,
-                channel
-            })
+                channel,
+            });
+        };
 
-            channel.onopen = () => {
-                console.log("WebRTC channel open")
-            }
+        await connection.setRemoteDescription(
+            new RTCSessionDescription(offerMessage.offer)
+        );
 
-        }
-
-        await connection.setRemoteDescription(parsed.offer)
-
-        const answer = await connection.createAnswer()
-
-        await connection.setLocalDescription(answer)
+        const answer = await connection.createAnswer();
+        await connection.setLocalDescription(answer);
 
         return JSON.stringify({
             type: "PAIR_ANSWER",
-            answer: connection.localDescription
-        })
+            answer: connection.localDescription,
+        });
     }
 
-    public async completePairing(
-        remoteDeviceId: string,
-        answerJSON: string
-    ): Promise<void> {
-
-        const parsed = JSON.parse(answerJSON)
-
-        if (parsed.type !== "PAIR_ANSWER") {
-            throw new Error("Invalid pairing answer")
+    public async completePairing(answerMessage: PairingAnswerMessage): Promise<void> {
+        if (!answerMessage?.answer) {
+            throw new Error("Invalid pairing answer");
         }
 
-        const remote = this.remoteDevices.get(remoteDeviceId)
+        // find the active pairing connection
+        const session = Array.from(this.remoteDevices.values())
+            .find((r) => r.connection.signalingState !== "stable");
 
-        if (!remote) {
-            throw new Error("Connection not initialised")
+        if (!session) {
+            throw new Error("No active pairing session");
         }
 
-        await remote.connection.setRemoteDescription(parsed.answer)
+        await session.connection.setRemoteDescription(
+            new RTCSessionDescription(answerMessage.answer)
+        );
 
-        remote.channel.onopen = async () => {
-
-            console.log("Connection established")
-
-            await this.performHandshake(remoteDeviceId)
-
-        }
+        // now connection is established
     }
-
+    
     // verify a signature given public key and data
     private async verifySignature(
         publicKey: CryptoKey,

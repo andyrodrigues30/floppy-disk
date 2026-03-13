@@ -1,55 +1,32 @@
 export interface DeviceKeys {
-  signingKeyPair: CryptoKeyPair;      // ECDSA keys for signing/verification
-  encryptionKeyPair: CryptoKeyPair;   // RSA-OAEP keys for encrypt/decrypt
+  signingKeyPair: CryptoKeyPair;
+  encryptionKeyPair: CryptoKeyPair;
 }
 
-// this device (local device)
+// Local device
 export interface ThisDevice extends DeviceKeys {
   readonly id: string;
-  publicKey: string; // base64 (main public key for display / fingerprint)
-  fingerprint: string; // short hash of public key
+  publicKey: string;
+  fingerprint: string;
   name?: string;
   readonly createdAt?: number;
-  privateKey?: CryptoKey; // optional in memory
+  privateKey?: CryptoKey;
 }
 
-// base device for all remote devices
+// Base remote device
 export interface BaseDevice {
   readonly id: string;
-  readonly publicKey: string;
+  publicKey: string;
   readonly fingerprint: string;
   readonly addedAt: number;
   name?: string;
   lastSeen?: number;
 }
 
-export type Device =
-  | PendingIncomingDevice
-  | PendingOutgoingDevice
-  | TrustedDevice
-  | RevokedDevice;
-
-export interface RemoteDevice {
-  device: Device;
-  connection: RTCPeerConnection;
-  channel: RTCDataChannel;
-}
-
-// trust state for devices
+// Trust status (minimal model)
 export type DeviceTrustStatus =
-  | "pending-incoming"
-  | "pending-outgoing"
   | "trusted"
   | "revoked";
-
-// discriminated union for trust states
-export interface PendingIncomingDevice extends BaseDevice {
-  trustStatus: "pending-incoming";
-}
-
-export interface PendingOutgoingDevice extends BaseDevice {
-  trustStatus: "pending-outgoing";
-}
 
 export interface TrustedDevice extends BaseDevice {
   trustStatus: "trusted";
@@ -57,4 +34,12 @@ export interface TrustedDevice extends BaseDevice {
 
 export interface RevokedDevice extends BaseDevice {
   trustStatus: "revoked";
+}
+
+export type Device = TrustedDevice | RevokedDevice;
+
+export interface RemoteDevice {
+  device: Device;
+  connection: RTCPeerConnection;
+  channel: RTCDataChannel;
 }

@@ -1,20 +1,28 @@
 export interface Snapshot {
-  version: 1
-  devices: Record<string, DeviceSnapshot>
-  currentDeviceId?: string
+  version: 1;
+  devices: Record<string, DeviceSnapshot>;
+  currentDeviceId?: string;
 }
 
 export interface DeviceSnapshot {
-  deviceId: string
-  name?: string
-  lastSeen: number
-  lastSyncedAt: number
-  files: Record<string, SnapshotEntry>
-  publicKey?: JsonWebKey
+  id: string;
+  name?: string;
+
+  publicKey: string;
+  fingerprint: string;
+
+  trustStatus: "trusted" | "revoked";
+
+  addedAt: number;
+  lastSeen: number;
+
+  lastSyncedAt: number;
+
+  files: Record<string, SnapshotEntry>;
 }
 
 export interface SnapshotEntry {
-  lastSyncedHash: string
-  lastSyncedTimestamp: number
-  lastSyncedBy?: string
+  lastSyncedHash: string;
+  lastSyncedTimestamp: number;
+  lastSyncedBy?: string;
 }

@@ -1,4 +1,4 @@
-import { TFile } from "obsidian"
+import { Notice, TFile } from "obsidian"
 import FloppyDiskPlugin from "main"
 import { generateManifest } from "./manifest"
 import { FloppyDiskCrypto } from "utils/cryptoHelper"
@@ -21,14 +21,16 @@ import {
     isHandshakeAckMessage,
     isHandshakeMessage,
     isManifestResponseMessage,
-    isRequestManifestMessage
+    isRequestManifestMessage,
 } from "utils/messageGuards"
+import { PairingAnswerMessage, PairingOfferMessage } from "types/pairing"
 
 const CHUNK_SIZE = 64 * 1024;
 
 export class WebRTCManager {
     private plugin: FloppyDiskPlugin;
     private remoteDevices: Map<string, RemoteDevice> = new Map();
+    private pairingSessions: Map<string, RTCPeerConnection> = new Map();
     private channels: Record<string, RTCDataChannel> = {};
     private fileBuffers: Record<string, Uint8Array[]> = {};
 
@@ -38,15 +40,19 @@ export class WebRTCManager {
 
     // connect to a device
     public connect(deviceId: string, channel: RTCDataChannel) {
-        this.channels[deviceId] = channel
+        this.channels[deviceId] = channel;
 
-        channel.onmessage = async (event: MessageEvent<string | ArrayBuffer>) => {
-            await this.handleMessage(deviceId, event.data)
-        }
+        channel.onopen = async () => {
+            await this.startHandshake(deviceId);
+        };
+
+        channel.onmessage = async (event) => {
+            await this.handleMessage(deviceId, event.data);
+        };
 
         channel.onclose = () => {
-            delete this.channels[deviceId]
-        }
+            delete this.channels[deviceId];
+        };
     }
 
     // send message to a connected device
@@ -96,23 +102,23 @@ export class WebRTCManager {
     // generate local manifest
     public async generateLocalManifest(): Promise<Manifest> {
         if (!this.plugin.snapshotManager) {
-            throw new Error("WebRTCManager: snapshotManager not initialized")
+            throw new Error("WebRTCManager: snapshotManager not initialized");
         }
 
-        const snapshot = await this.plugin.snapshotManager.loadSnapshot()
-        let deviceId: string
+        // Device ID should come from plugin settings (single source of truth)
+        const deviceId: string = this.plugin.settings.thisDevice.id;
 
-        if (snapshot.currentDeviceId) {
-            deviceId = snapshot.currentDeviceId
-        } else {
-            // register the current device and get the id
-            await this.plugin.snapshotManager.registerCurrentDevice()
-            deviceId = snapshot.currentDeviceId!
+        if (!deviceId) {
+            throw new Error("Current device ID is missing in settings");
         }
 
-        const vaultId = this.plugin.app.vault.getName()
+        const vaultId: string = this.plugin.app.vault.getName();
 
-        return generateManifest(this.plugin.app, vaultId, deviceId)
+        return generateManifest(
+            this.plugin.app,
+            vaultId,
+            deviceId
+        );
     }
 
     public async requestRemoteManifest(deviceId: string): Promise<Manifest> {
@@ -162,68 +168,111 @@ export class WebRTCManager {
         this.sendMessage(deviceId, msg)
     }
 
-    private async handleHandshake(msg: HandshakeMessage) {
-        console.warn("Received handshake from", msg.deviceId)
+    private async startHandshake(deviceId: string): Promise<void> {
+        const device = this.plugin.settings.thisDevice;
 
-        let accepted = false
+        const payload = new TextEncoder().encode(device.fingerprint);
+
+        const signature = await FloppyDiskCrypto.signData(
+            device.signingKeyPair.privateKey,
+            payload.buffer
+        );
+
+        const handshake: HandshakeMessage = {
+            type: "HANDSHAKE",
+            deviceId: device.id,
+            fingerprint: device.fingerprint,
+            signature: Array.from(new Uint8Array(signature)),
+            publicKey: device.publicKey
+        };
+
+        this.sendMessage(deviceId, handshake);
+    }
+
+    private async handleHandshake(msg: HandshakeMessage): Promise<void> {
+        console.warn("received handshake from", msg.deviceId);
+
+        console.warn("HANDSHAKE RECEIVED:", msg.deviceId);
+
+        let accepted = false;
 
         try {
-            // convert incoming device signature from ArrayBuffer
-            const payload = new TextEncoder().encode(msg.deviceId)
+            // validate incoming public key format
+            if (!msg.publicKey) {
+                throw new Error("missing public key in handshake");
+            }
 
-            const remotePublicKey = await crypto.subtle.importKey(
+            // convert base64 jwk string back to object
+            const jwk: JsonWebKey = JSON.parse(atob(msg.publicKey));
+
+            // import remote signing key
+            const remotePublicKey: CryptoKey = await crypto.subtle.importKey(
                 "jwk",
-                msg.publicKey,
+                jwk,
                 { name: "ECDSA", namedCurve: "P-256" },
                 true,
                 ["verify"]
-            )
+            );
 
-            accepted = await this.verifySignature(remotePublicKey, payload.buffer, msg.signature)
+            // verify against fingerprint (consistent identity proof)
+            const encoder = new TextEncoder();
+            const data: ArrayBuffer = encoder.encode(msg.fingerprint).buffer;
+
+            const signature: ArrayBuffer = new Uint8Array(msg.signature).buffer;
+
+            accepted = await this.verifySignature(
+                remotePublicKey,
+                data,
+                signature
+            );
 
             if (accepted) {
-                console.warn("Handshake verified. Device trusted:", msg.deviceId)
-                await this.registerTrustedDevice(msg.deviceId, msg.publicKey)
+                console.warn("handshake verified. device trusted:", msg.deviceId);
+
+                await this.updateTrustedDevice(msg.deviceId, msg.publicKey);
             } else {
-                console.warn("Handshake signature invalid from device:", msg.deviceId)
+                console.warn("handshake signature invalid:", msg.deviceId);
             }
 
         } catch (err) {
-            console.error("Error verifying handshake:", err)
+            console.error("error verifying handshake:", err);
         }
 
-        // reply with ack
-        const ack: HandshakeAckMessage = { type: "HANDSHAKE_ACK", accepted }
-        this.sendMessage(msg.deviceId, ack)
+        // send acknowledgement
+        const ack: HandshakeAckMessage = {
+            type: "HANDSHAKE_ACK",
+            accepted
+        };
+
+        this.sendMessage(msg.deviceId, ack);
     }
 
     public async performHandshake(remoteDeviceId: string): Promise<boolean> {
-        // find the remote device
-        const remoteDevice: Device | undefined = this.plugin.findDevice(remoteDeviceId);
+        const remoteDevice: Device | undefined =
+            this.plugin.findDevice(remoteDeviceId);
+
         if (!remoteDevice) {
             console.warn(`Handshake failed: device ${remoteDeviceId} not found`);
             return false;
         }
 
-        // only trusted devices can handshake
-        if (remoteDevice.trustStatus !== "trusted") {
-            console.warn(`Handshake failed: device ${remoteDeviceId} is not trusted`);
-            return false;
-        }
+        const connection = new RTCPeerConnection();
+        const channel = connection.createDataChannel("handshake");
+
+        const remote: RemoteDevice = {
+            device: remoteDevice,
+            connection,
+            channel,
+        };
+
+        this.remoteDevices.set(remoteDeviceId, remote);
 
         try {
-            const connection: RTCPeerConnection = new RTCPeerConnection();
-            const channel: RTCDataChannel = connection.createDataChannel("handshake");
-
-            const remote: RemoteDevice = {
-                device: remoteDevice,
-                connection,
-                channel,
-            };
-            this.remoteDevices.set(remoteDeviceId, remote);
-
             channel.onopen = async () => {
-                const payload = new TextEncoder().encode(this.plugin.settings.thisDevice.fingerprint);
+                const payload = new TextEncoder().encode(
+                    this.plugin.settings.thisDevice.fingerprint
+                );
+
                 const signature = await FloppyDiskCrypto.signData(
                     this.plugin.settings.thisDevice.signingKeyPair.privateKey,
                     payload.buffer
@@ -233,25 +282,23 @@ export class WebRTCManager {
                     type: "HANDSHAKE",
                     deviceId: this.plugin.settings.thisDevice.id,
                     fingerprint: this.plugin.settings.thisDevice.fingerprint,
-                    signature: Array.from(new Uint8Array(signature)), // send as array
-                    publicKey: this.plugin.settings.thisDevice.signingKeyPair.publicKey,
+                    signature: Array.from(new Uint8Array(signature)),
+                    publicKey: this.plugin.settings.thisDevice.publicKey,
                 };
+
                 channel.send(JSON.stringify(handshakeMsg));
             };
 
-            const handshakeConfirmed: boolean = await new Promise<boolean>((resolve) => {
+            const handshakeConfirmed = await new Promise<boolean>((resolve) => {
                 channel.onmessage = (ev: MessageEvent) => {
                     try {
                         if (typeof ev.data !== "string") return;
-                        const data: unknown = JSON.parse(ev.data);
 
-                        // runtime type check
+                        const data = JSON.parse(ev.data);
+
                         if (
-                            typeof data === "object" &&
-                            data !== null &&
-                            (data as HandshakeAckMessage).type === "HANDSHAKE_ACK" &&
-                            typeof (data as HandshakeAckMessage).accepted === "boolean" &&
-                            (data as HandshakeAckMessage).accepted === true
+                            data?.type === "HANDSHAKE_ACK" &&
+                            data?.accepted === true
                         ) {
                             resolve(true);
                         }
@@ -260,16 +307,96 @@ export class WebRTCManager {
                     }
                 };
 
-                // optional timeout
                 setTimeout(() => resolve(false), 10000);
             });
 
+            if (!handshakeConfirmed) {
+                this.remoteDevices.delete(remoteDeviceId);
+                connection.close();
+            }
 
             return handshakeConfirmed;
+
         } catch (err) {
             console.error("Handshake error:", err);
+            this.remoteDevices.delete(remoteDeviceId);
+            connection.close();
             return false;
         }
+    }
+
+    public async createPairingOffer(): Promise<string> {
+        const connection = new RTCPeerConnection();
+
+        const channel = connection.createDataChannel("pairing");
+
+        // create deterministic session id
+        const sessionId = crypto.randomUUID();
+
+        this.pairingSessions.set(sessionId, connection);
+
+        const offer = await connection.createOffer();
+        await connection.setLocalDescription(offer);
+
+        return JSON.stringify({
+            type: "PAIR_OFFER",
+            sessionId,
+            offer: connection.localDescription
+        });
+    }
+
+    public async acceptPairingOffer(
+        offerMessage: PairingOfferMessage
+    ): Promise<string> {
+
+        if (!offerMessage?.offer || !offerMessage?.sessionId) {
+            throw new Error("Invalid pairing offer");
+        }
+
+        const connection = new RTCPeerConnection();
+
+        this.pairingSessions.set(offerMessage.sessionId, connection);
+
+        connection.ondatachannel = (event) => {
+            const channel = event.channel;
+
+            // register channel immediately
+            this.connect(offerMessage.sessionId, channel);
+        };
+
+        await connection.setRemoteDescription(
+            new RTCSessionDescription(offerMessage.offer)
+        );
+
+        const answer = await connection.createAnswer();
+        await connection.setLocalDescription(answer);
+
+        return JSON.stringify({
+            type: "PAIR_ANSWER",
+            sessionId: offerMessage.sessionId,
+            answer: connection.localDescription
+        });
+    }
+
+    public async completePairing(
+        answerMessage: PairingAnswerMessage
+    ): Promise<void> {
+
+        if (!answerMessage?.answer || !answerMessage?.sessionId) {
+            throw new Error("Invalid pairing answer");
+        }
+
+        const connection = this.pairingSessions.get(answerMessage.sessionId);
+
+        if (!connection) {
+            throw new Error("Pairing session not found");
+        }
+
+        await connection.setRemoteDescription(
+            new RTCSessionDescription(answerMessage.answer)
+        );
+
+        this.pairingSessions.delete(answerMessage.sessionId);
     }
 
     // verify a signature given public key and data
@@ -286,26 +413,35 @@ export class WebRTCManager {
         )
     }
 
-    // register a trusted device in SnapshotManager
-    private async registerTrustedDevice(deviceId: string, publicKey: JsonWebKey) {
-        const snapshot = await this.plugin.snapshotManager.loadSnapshot()
-        const now = Date.now()
+    private async updateTrustedDevice(
+        deviceId: string,
+        publicKey: string
+    ): Promise<void> {
+        console.warn("Updating trusted device:", deviceId);
+        const snapshot = await this.plugin.snapshotManager.loadSnapshot();
+        const now = Date.now();
 
-        if (!snapshot.devices[deviceId]) {
-            snapshot.devices[deviceId] = {
-                deviceId,
-                name: deviceId,
-                lastSeen: now,
-                lastSyncedAt: 0,
-                files: {},
-                publicKey
-            }
+        const existing = snapshot.devices[deviceId];
+
+        if (existing) {
+            existing.trustStatus = "trusted";
+            existing.publicKey = publicKey;
+            existing.lastSeen = now;
         } else {
-            snapshot.devices[deviceId].publicKey = publicKey
-            snapshot.devices[deviceId].lastSeen = now
+            snapshot.devices[deviceId] = {
+                id: deviceId,
+                name: deviceId,
+                publicKey,
+                fingerprint: await FloppyDiskCrypto.computeFingerprint(publicKey),
+                addedAt: now,
+                lastSeen: now,
+                trustStatus: "trusted",
+                lastSyncedAt: 0,
+                files: {}
+            };
         }
 
-        await this.plugin.snapshotManager.saveSnapshot()
+        await this.plugin.snapshotManager.saveSnapshot();
     }
 
     public async sendFileInChunks(deviceId: string, path: string) {

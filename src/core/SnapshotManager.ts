@@ -1,7 +1,7 @@
 import { App, TFile } from "obsidian"
 import getDefaultDeviceName from "utils/device"
 import { FloppyDiskSettings } from "types/settings"
-import { Snapshot } from "types/snapshot"
+import { DeviceSnapshot, Snapshot } from "types/snapshot"
 import { Manifest } from "types/manifest"
 
 export class SnapshotManager {
@@ -26,7 +26,6 @@ export class SnapshotManager {
     }
 
     public async ensureSnapshotExists(): Promise<Snapshot> {
-        // await this.ensureFolderExists()
         await this.loadSnapshot()
         await this.saveSnapshot()
         return this.snapshot as Snapshot
@@ -104,6 +103,7 @@ export class SnapshotManager {
         const existingDevice = this.snapshot.devices[deviceId]
 
         const defaultName = getDefaultDeviceName()
+
         const finalName =
             userProvidedName?.trim() ||
             this.settings.deviceName?.trim() ||
@@ -111,13 +111,23 @@ export class SnapshotManager {
 
         this.snapshot.currentDeviceId = deviceId
 
-        this.snapshot.devices[deviceId] = {
-            deviceId,
+        const updatedDevice: DeviceSnapshot = {
+            id: deviceId,
             name: finalName,
+
+            publicKey: existingDevice?.publicKey ?? "",
+            fingerprint: existingDevice?.fingerprint ?? "",
+
+            trustStatus: existingDevice?.trustStatus ?? "trusted",
+
+            addedAt: existingDevice?.addedAt ?? now,
             lastSeen: now,
+
             lastSyncedAt: existingDevice?.lastSyncedAt ?? 0,
             files: existingDevice?.files ?? {}
         }
+
+        this.snapshot.devices[deviceId] = updatedDevice;
 
         await this.saveSnapshot()
     }
@@ -136,17 +146,25 @@ export class SnapshotManager {
         const currentDeviceId = snapshot.currentDeviceId
         const now = Date.now()
 
-        if (!snapshot.devices[remoteDeviceId]) {
-            snapshot.devices[remoteDeviceId] = {
-                deviceId: remoteDeviceId,
-                name: undefined,
-                lastSeen: now,
-                lastSyncedAt: now,
-                files: {}
-            }
+        const deviceSnapshot: DeviceSnapshot = snapshot.devices[remoteDeviceId] ?? {
+            id: remoteDeviceId,
+            name: undefined,
+
+            publicKey: "",
+            fingerprint: "",
+
+            trustStatus: "trusted",
+
+            addedAt: now,
+            lastSeen: now,
+            lastSyncedAt: now,
+
+            files: {}
         }
 
-        const deviceSnapshot = snapshot.devices[remoteDeviceId]
+        snapshot.devices[remoteDeviceId] = deviceSnapshot
+
+        deviceSnapshot.lastSeen = now
         deviceSnapshot.lastSyncedAt = now
         deviceSnapshot.files = {}
 
@@ -174,17 +192,17 @@ export class SnapshotManager {
 
         const deviceId = snapshot.currentDeviceId
         const now = Date.now()
+        
+        let deviceSnapshot = snapshot.devices[deviceId]
 
         if (!snapshot.devices[deviceId]) {
             await this.registerCurrentDevice()
+            deviceSnapshot = snapshot.devices[deviceId]
         }
-
-        const deviceSnapshot = snapshot.devices[deviceId]
 
         if (!deviceSnapshot) {
             throw new Error("FloppyDisk: Failed to initialise current device snapshot")
         }
-
 
         deviceSnapshot.files[filePath] = {
             lastSyncedHash: fileHash,
@@ -193,6 +211,7 @@ export class SnapshotManager {
         }
 
         deviceSnapshot.lastSyncedAt = now
+        deviceSnapshot.lastSeen = now
 
         await this.saveSnapshot()
     }

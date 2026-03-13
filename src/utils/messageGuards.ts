@@ -1,4 +1,9 @@
-import { BaseMessage, ConflictNotificationMessage, FileChunkMessage, FileCompleteMessage, FileRequestMessage, HandshakeAckMessage, HandshakeMessage, ManifestResponseMessage, RequestManifestMessage } from "types/messages";
+import {
+    BaseMessage, ConflictNotificationMessage,
+    FileChunkMessage, FileCompleteMessage, FileRequestMessage,
+    HandshakeAckMessage, HandshakeMessage,
+    ManifestResponseMessage, RequestManifestMessage,
+} from "types/messages";
 
 export function isRequestManifestMessage(obj: unknown): obj is RequestManifestMessage {
     return typeof obj === "object" && obj !== null && (obj as BaseMessage).type === "REQUEST_MANIFEST"

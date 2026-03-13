@@ -1,10 +1,9 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import FloppyDiskPlugin from "main";
 import { FloppyDiskCrypto } from "utils/cryptoHelper";
-import { isPendingDevice, isTrustedDevice } from "utils/deviceGuards";
 import { DeviceRow } from "ui/DeviceRow";
-import { Device, DeviceTrustStatus } from "types/device";
-
+import { Device } from "types/device";
+import { PairDeviceModal } from "ui/PairDeviceModal";
 
 export class FloppyDiskSettingsTab extends PluginSettingTab {
   declare plugin: FloppyDiskPlugin;
@@ -13,6 +12,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     super(app, plugin);
     this.plugin = plugin;
   }
+
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
@@ -20,14 +20,16 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     // this device section
     new Setting(containerEl).setName("This device").setHeading();
     this.renderCurrentDevice(containerEl);
+
     // add device section
     this.renderAddDevice(containerEl);
-    // pending devices
-    new Setting(containerEl).setName("Pending devices").setHeading();
-    this.renderPendingDevices(containerEl);
+
+    // pair device section
+    this.renderPairDevice(containerEl)
+
     // trusted devices
-    new Setting(containerEl).setName("Trusted devices").setHeading();
-    this.renderTrustedDevices(containerEl);
+    new Setting(containerEl).setName("Devices").setHeading();
+    this.renderDevices(containerEl);
   }
 
   private renderCurrentDevice(containerEl: HTMLElement): void {
@@ -35,58 +37,55 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Device name")
-      .setDesc("Give this device a friendly name syncing")
+      .setDesc("Give this device a friendly name")
       .addText((text) =>
         text
           .setPlaceholder("Optional")
           .setValue(this.plugin.settings.deviceName ?? "")
-          .onChange(async (value: string): Promise<void> => {
-            const trimmed = value.trim();
-            this.plugin.settings.deviceName = trimmed;
+          .onChange(async (value: string) => {
+            this.plugin.settings.deviceName = value.trim();
             await this.plugin.saveSettings();
           })
       );
 
     new Setting(containerEl)
       .setName("Device ID")
-      .setDesc("Copy this to add this device to another device")
       .setDesc(device.id)
       .addButton((btn) =>
         btn
           .setButtonText("Copy")
-          .onClick((): void => {
+          .onClick(() => {
             void navigator.clipboard.writeText(device.id);
-            new Notice("Device ID copied");
+            new Notice("Device ID copied.");
           })
-      )
+      );
 
     new Setting(containerEl)
       .setName("Public key")
-      .setDesc(`Copy this to add this device to another device:\n${device.publicKey}`)
+      .setDesc(device.publicKey)
       .addButton((btn) =>
         btn
           .setButtonText("Copy")
-          .onClick((): void => {
+          .onClick(() => {
             void navigator.clipboard.writeText(device.publicKey);
-            new Notice("Public key copied");
+            new Notice("Public key copied.");
           })
       );
 
     new Setting(containerEl)
       .setName("Fingerprint")
-      .setDesc(device.fingerprint)
+      .setDesc(device.fingerprint);
 
     new Setting(containerEl)
       .setName("Regenerate keys")
-      .setDesc("Regenerating keys will require you to updated it on other devices.")
+      .setDesc("Regenerating keys requires updating other devices.")
       .addButton((btn) =>
         btn
           .setWarning()
           .setButtonText("Regenerate")
-          .onClick(async (): Promise<void> => {
+          .onClick(async () => {
             await this.regenerateKeys();
-            await this.plugin.saveSettings();
-            new Notice("Keys regenerated");
+            new Notice("Keys regenerated.");
             this.display();
           })
       );
@@ -103,12 +102,12 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
           .setButtonText("Add device")
           .onClick(async (): Promise<void> => {
             if (!publicKey || !deviceId) {
-              new Notice("Public key required");
+              new Notice("Device ID and Public Key required.");
               return;
             }
             await this.addDevice(deviceId, publicKey);
             await this.plugin.saveSettings();
-            new Notice("Device added (pending)");
+            new Notice("Device added (pending).");
             this.display();
           })
       );
@@ -135,76 +134,77 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
       })
   }
 
-  private renderPendingDevices(containerEl: HTMLElement): void {
-    const pending: Device[] = this.plugin.settings.devices.filter(isPendingDevice);
+  private renderPairDevice(containerEl: HTMLElement): void {
+    new Setting(containerEl)
+      .setName("Pair Device").setHeading()
+      .setDesc("Start or complete device pairing")
+      .addButton(btn =>
+        btn
+          .setButtonText("Pair Device")
+          .onClick(() => {
+            new PairDeviceModal(
+              this.app,
+              this.plugin.webrtcManager,
+              "" // no deviceId required yet
+            ).open();
+          })
+      );
+  }
 
-    if (!pending.length) {
-      new Setting(containerEl).setDesc("No pending devices.");
+  private renderDevices(containerEl: HTMLElement): void {
+    const devices: Device[] = this.plugin.settings.devices;
+
+    if (!devices.length) {
+      new Setting(containerEl).setDesc("No devices yet.");
       return;
     }
 
-    pending.forEach((device) => {
+    devices.forEach((device) => {
       new DeviceRow(containerEl, this.plugin, device).render();
     });
   }
 
-  private renderTrustedDevices(containerEl: HTMLElement): void {
-    const trusted: Device[] = this.plugin.settings.devices.filter(isTrustedDevice);
-
-
-    if (!trusted.length) {
-      new Setting(containerEl).setDesc("No trusted devices yet.");
-      return;
-    }
-
-    trusted.forEach((device) => {
-      new DeviceRow(containerEl, this.plugin, device).render();
-    });
-  }
-
-  // add a new device (incoming or outgoing pending)
+  // register device without trust state (trust handled by handshake)
   public async addDevice(
     deviceId: string,
-    publicKey: string,
-    name?: string,
-    outgoing: boolean = false
+    publicKey: string
   ): Promise<void> {
-    if (!publicKey) throw new Error("Public key is required");
+    if (!publicKey) throw new Error("public key is required");
 
     const existing = this.plugin.findDevice(deviceId);
     if (existing) {
-      new Notice("Device already exists");
+      new Notice("Device already exists.");
       return;
     }
 
-    const trustStatus: DeviceTrustStatus = outgoing ? "pending-outgoing" : "pending-incoming";
-
     const newDevice: Device = {
       id: deviceId,
+      name: deviceId,
       publicKey,
       fingerprint: await FloppyDiskCrypto.computeFingerprint(publicKey),
       addedAt: Date.now(),
-      name,
-      trustStatus,
+      trustStatus: "revoked"
     };
 
-    this.plugin.settings.trustedDevices[deviceId] = newDevice;
+    this.plugin.settings.devices.push(newDevice);
     await this.plugin.saveSettings();
-    new Notice(`Device added: ${name ?? deviceId} (${trustStatus})`);
+
+    new Notice("Device added. Trust will be established via handshake.");
   }
 
-  private async regenerateKeys(): Promise<void> {
+  public async regenerateKeys(): Promise<void> {
     if (!this.plugin.settings.thisDevice) return;
 
-    // generate new key pairs
     const newKeys = await FloppyDiskCrypto.generateDeviceKeys();
 
-    // keep existing id, name, and fingerprint updated
     const exportedPublicKey = await FloppyDiskCrypto.computeExportedKey(
       newKeys.signingKeyPair.publicKey
     );
+
     const publicKeyBase64 = btoa(JSON.stringify(exportedPublicKey));
-    const fingerprint = await FloppyDiskCrypto.computeFingerprint(publicKeyBase64);
+
+    const fingerprint =
+      await FloppyDiskCrypto.computeFingerprint(publicKeyBase64);
 
     this.plugin.settings.thisDevice = {
       ...this.plugin.settings.thisDevice,
@@ -215,7 +215,12 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
       privateKey: newKeys.signingKeyPair.privateKey,
     };
 
-    new Notice("Keys regenerated");
     await this.plugin.saveSettings();
+  }
+
+  public getDeviceStatus(device: Device) {
+    if (device.trustStatus === "revoked") return "Revoked";
+    if (device.trustStatus === "trusted") return "Trusted";
+    return "Added";
   }
 }

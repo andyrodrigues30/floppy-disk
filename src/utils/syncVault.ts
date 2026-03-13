@@ -1,7 +1,7 @@
 import { App, Notice } from "obsidian";
-import { SnapshotManager } from "core/snapshot";
+import { SnapshotManager } from "core/SnapshotManager";
 import { createSyncPlan, executeSync } from "core/syncEngine";
-import { WebRTCManager } from "core/webrtc";
+import { WebRTCManager } from "core/WebRTCManager";
 import { Manifest } from "types/manifest";
 
 export async function syncVault(
@@ -15,11 +15,7 @@ export async function syncVault(
     const snapshot = await snapshotManager.loadSnapshot();
 
     try {
-        const trusted = await webrtcManager.performHandshake(remoteDeviceId);
-        if (!trusted) {
-            new Notice(`Device ${remoteDeviceId} not trusted. Aborting sync.`);
-            return;
-        }
+        await webrtcManager.performHandshake(remoteDeviceId);
     } catch (err) {
         console.error("Handshake failed:", err);
         new Notice(`Handshake with ${remoteDeviceId} failed.`);

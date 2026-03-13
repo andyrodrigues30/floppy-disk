@@ -296,32 +296,28 @@ export class WebRTCManager {
         }
     }
 
-    public async createPairingOffer(remoteDeviceId: string): Promise<string> {
+    public async createPairingOffer(): Promise<string> {
+        const connection = new RTCPeerConnection();
 
-        const remoteDevice = this.plugin.findDevice(remoteDeviceId)
+        // Optional: store temporarily without remote device
+        const channel = connection.createDataChannel("pairing");
 
-        if (!remoteDevice) {
-            throw new Error("Device not found")
-        }
+        // Store using a temporary key (not remoteDeviceId yet)
+        const tempId = crypto.randomUUID();
 
-        const connection = new RTCPeerConnection()
-
-        const channel = connection.createDataChannel("sync")
-
-        this.remoteDevices.set(remoteDeviceId, {
-            device: remoteDevice,
+        this.remoteDevices.set(tempId, {
+            device: null as any, // not known yet
             connection,
             channel
-        })
+        });
 
-        const offer = await connection.createOffer()
-
-        await connection.setLocalDescription(offer)
+        const offer = await connection.createOffer();
+        await connection.setLocalDescription(offer);
 
         return JSON.stringify({
             type: "PAIR_OFFER",
-            offer: connection.localDescription
-        })
+            offer: connection.localDescription,
+        });
     }
 
     public async acceptPairingOffer(

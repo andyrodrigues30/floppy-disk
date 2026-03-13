@@ -22,7 +22,7 @@ export class PairDeviceModal extends Modal {
       .addButton(btn =>
         btn.setButtonText("Generate")
           .onClick(async () => {
-            const offer = await this.webrtc.createPairingOffer(this.deviceId);
+            const offer = await this.webrtc.createPairingOffer();
             await navigator.clipboard.writeText(offer);
             new Notice("Pair code copied");
           })

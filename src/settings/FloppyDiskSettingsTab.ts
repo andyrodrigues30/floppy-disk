@@ -24,6 +24,9 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     // add device section
     this.renderAddDevice(containerEl);
 
+    // pair device section
+    this.renderPairDevice(containerEl)
+
     // trusted devices
     new Setting(containerEl).setName("Devices").setHeading();
     this.renderDevices(containerEl);
@@ -129,9 +132,11 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
         text.inputEl.classList.add("settings-public-key");
       })
+  }
 
+  private renderPairDevice(containerEl: HTMLElement): void {
     new Setting(containerEl)
-      .setName("Pair Device")
+      .setName("Pair Device").setHeading()
       .setDesc("Start or complete device pairing")
       .addButton(btn =>
         btn

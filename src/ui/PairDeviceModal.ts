@@ -78,6 +78,8 @@ export class PairDeviceModal extends Modal {
           await this.webrtc.updateTrustedDevice(parsed.deviceId, parsed.publicKey);
         }
 
+        await this.plugin.saveSettings();
+
         // refresh UI
         this.plugin.settingsTab?.display();
 

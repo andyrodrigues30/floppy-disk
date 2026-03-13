@@ -29,11 +29,8 @@ export default class FloppyDiskPlugin extends Plugin {
       ...DEFAULT_SETTINGS,
       ...loaded,
       thisDevice: loaded?.thisDevice ?? (await createThisDevice()),
-      trustedDevices: loaded?.trustedDevices ?? {},
       deviceName: loaded?.deviceName ?? DEFAULT_SETTINGS.deviceName,
     };
-
-    // TODO: add sync update event function
 
     // commands
     registerCommands(this);
@@ -92,6 +89,6 @@ export default class FloppyDiskPlugin extends Plugin {
 
   // find a device by ID
   public findDevice(deviceId: string): Device | undefined {
-    return Object.values(this.settings.devices).find(d => d.id === deviceId);
+    return this.settings.devices[deviceId];
   }
 }

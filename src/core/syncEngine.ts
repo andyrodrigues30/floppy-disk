@@ -5,6 +5,7 @@ import { FloppyDiskCrypto } from "utils/cryptoHelper"
 import { SyncAction, SyncPlan } from "types/sync"
 import { Snapshot } from "types/snapshot"
 import { Manifest } from "types/manifest"
+import { isTextFile } from "utils/isTextFile"
 
 
 export function createSyncPlan(
@@ -12,6 +13,7 @@ export function createSyncPlan(
     remoteManifest: Manifest,
     snapshot: Snapshot,
 ): SyncPlan {
+
     const uploads: SyncAction[] = []
     const downloads: SyncAction[] = []
     const deletes: SyncAction[] = []
@@ -20,8 +22,7 @@ export function createSyncPlan(
     const remoteFiles = remoteManifest.files
     const localFiles = localManifest.files
 
-    // get snapshot of the remote device (if exists)
-    const remoteSnapshot = snapshot.devices[remoteManifest.deviceId]?.files || {}
+    const baseFiles = snapshot.files || {};
 
     // combine all unique file paths
     const allPaths = new Set<string>([
@@ -30,14 +31,18 @@ export function createSyncPlan(
     ])
 
     for (const path of allPaths) {
+
         const localHash = localFiles[path]
         const remoteHash = remoteFiles[path]
-        const baseHash = remoteSnapshot[path]?.lastSyncedHash
+        const baseHash = baseFiles[path]?.lastSyncedHash
 
         if (localHash === remoteHash) {
             // same on both sides THEN SKIP
             continue
-        } else if (baseHash === undefined) {
+        }
+        
+        // file never synced before
+        if (baseHash === undefined) {
             // new file on device/s THEN UPLOAD/DOWNLOAD
             if (localHash && !remoteHash) {
                 uploads.push({ path, action: "upload", localHash, baseHash })
@@ -47,7 +52,12 @@ export function createSyncPlan(
                 // both exist but no base THEN CONFLICT
                 conflicts.push({ path, action: "conflict", localHash, remoteHash })
             }
-        } else if (localHash === baseHash && remoteHash !== baseHash) {
+
+            continue
+        }
+        
+        // three way merge logic
+        if (localHash === baseHash && remoteHash !== baseHash) {
             // local unchanged, remote changed THEN DOWNLOAD
             downloads.push({ path, action: "download", localHash, remoteHash, baseHash })
         } else if (remoteHash === baseHash && localHash !== baseHash) {
@@ -69,9 +79,11 @@ export async function executeSync(
     plan: SyncPlan,
     remoteDeviceId: string
 ): Promise<void> {
+
     // helper to backup a file
     async function backupFile(path: string): Promise<void> {
-        const file = app.vault.getAbstractFileByPath(path)
+        const file = app.vault.getAbstractFileByPath(path);
+
         if (file instanceof TFile) {
             const backupPath = `${path}.bak`
             // ONLY create backup if it doesn't exist
@@ -87,6 +99,7 @@ export async function executeSync(
         if (!(file instanceof TFile)) continue;
 
         await backupFile(action.path);
+
         // send file to remote via WebRTCManager
         await webrtcManager.sendFileInChunks(remoteDeviceId, action.path);
         console.warn(`Uploaded: ${action.path}`);
@@ -103,14 +116,14 @@ export async function executeSync(
         if (file instanceof TFile) {
             await backupFile(action.path);
 
-            if (action.path.match(/\.(txt|md|csv|json|js|ts)$/i)) {
+            if (isTextFile(action.path)) {
                 const content = new TextDecoder().decode(arrayBuffer);
                 await app.vault.modify(file, content);
             } else {
                 await app.vault.adapter.writeBinary(action.path, arrayBuffer);
             }
         } else {
-            if (action.path.match(/\.(txt|md|csv|json|js|ts)$/i)) {
+            if (isTextFile(action.path)) {
                 const content = new TextDecoder().decode(arrayBuffer);
                 await app.vault.create(action.path, content);
             } else {
@@ -128,7 +141,9 @@ export async function executeSync(
     // handle conflicts
     for (const action of plan.conflicts) {
         console.warn(`Conflict detected for file: ${action.path}`);
+
         const file = app.vault.getAbstractFileByPath(action.path);
+
         if (file instanceof TFile) {
             // create .conflict copy as a temporary resolution
             const conflictPath = `${action.path}.conflict`;

@@ -1,7 +1,6 @@
 import { Setting, Notice } from "obsidian";
 import FloppyDiskPlugin from "../main";
-import { Device, RevokedDevice, TrustedDevice } from "types/device";
-import { PairDeviceModal } from "./PairDeviceModal";
+import { Device, RevokedDevice } from "types/device";
 
 export class DeviceRow {
   private plugin: FloppyDiskPlugin;
@@ -65,24 +64,44 @@ export class DeviceRow {
       trustStatus: "revoked",
     };
 
-    this.plugin.settings.trustedDevices[deviceId] = revoked;
+    this.plugin.settings.devices[deviceId] = revoked;
     await this.plugin.saveSettings();
     new Notice(`Trust revoked for device: ${device.name ?? device.id}.`);
   }
 
-  // remove a device entirely
-  private async removeDevice(deviceId: string): Promise<void> {
-    if (!this.plugin.settings.trustedDevices[deviceId]) {
+
+  private async trustDevice(deviceId: string): Promise<void> {
+    const device = this.plugin.findDevice(deviceId);
+
+    if (!device) {
       new Notice("Device not found.");
       return;
     }
 
-    this.plugin.settings.devices = this.plugin.settings.devices.filter(
-      (d) => d.id !== this.device.id
-    );
+    device.trustStatus = "trusted";
 
     await this.plugin.saveSettings();
+
+    new Notice(`Device trusted: ${device.name ?? device.id}.`);
+
+    this.plugin.settingsTab?.display();
+  }
+
+  // remove a device entirely
+  private async removeDevice(deviceId: string): Promise<void> {
+    const device = this.plugin.findDevice(deviceId);
+
+    if (!device) {
+      new Notice("Device not found.");
+      return;
+    }
+
+    delete this.plugin.settings.devices[deviceId];
+
+    await this.plugin.saveSettings();
+
     new Notice("Device deleted.");
+
     this.plugin.settingsTab?.display();
   }
 }

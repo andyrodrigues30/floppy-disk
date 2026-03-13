@@ -24,6 +24,7 @@ import {
     isRequestManifestMessage,
 } from "utils/messageGuards"
 import { PairingAnswerMessage, PairingOfferMessage } from "types/pairing"
+import { isTextFile } from "utils/isTextFile"
 
 const CHUNK_SIZE = 64 * 1024;
 
@@ -413,35 +414,42 @@ export class WebRTCManager {
         )
     }
 
-    private async updateTrustedDevice(
+    public async updateTrustedDevice(
         deviceId: string,
         publicKey: string
     ): Promise<void> {
         console.warn("Updating trusted device:", deviceId);
-        const snapshot = await this.plugin.snapshotManager.loadSnapshot();
+
+        // const snapshot = await this.plugin.snapshotManager.loadSnapshot();
         const now = Date.now();
 
-        const existing = snapshot.devices[deviceId];
+        // ensure devices array exists
+        if (!this.plugin.settings.devices) {
+            this.plugin.settings.devices = {};
+        }
+
+        const devices = this.plugin.settings.devices;
+        const fingerprint = await FloppyDiskCrypto.computeFingerprint(publicKey);
+
+        const existing = devices[deviceId];
 
         if (existing) {
             existing.trustStatus = "trusted";
             existing.publicKey = publicKey;
             existing.lastSeen = now;
         } else {
-            snapshot.devices[deviceId] = {
+            devices[deviceId] = {
                 id: deviceId,
                 name: deviceId,
                 publicKey,
-                fingerprint: await FloppyDiskCrypto.computeFingerprint(publicKey),
-                addedAt: now,
-                lastSeen: now,
+                fingerprint,
                 trustStatus: "trusted",
-                lastSyncedAt: 0,
-                files: {}
+                addedAt: now,
+                lastSeen: now
             };
         }
 
-        await this.plugin.snapshotManager.saveSnapshot();
+        await this.plugin.saveSettings();
     }
 
     public async sendFileInChunks(deviceId: string, path: string) {
@@ -562,7 +570,7 @@ export class WebRTCManager {
         const file = this.plugin.app.vault.getAbstractFileByPath(path)
 
         if (file instanceof TFile) {
-            if (path.match(/\.(txt|md|csv|json|js|ts)$/i)) {
+            if (isTextFile(path)) {
                 const decoder = new TextDecoder()
                 const content = decoder.decode(fullBuffer)
                 await this.plugin.app.vault.modify(file, content)
@@ -570,7 +578,7 @@ export class WebRTCManager {
                 await this.plugin.app.vault.adapter.writeBinary(path, fullBuffer.buffer)
             }
         } else {
-            if (path.match(/\.(txt|md|csv|json|js|ts)$/i)) {
+            if (isTextFile(path)) {
                 const decoder = new TextDecoder()
                 const content = decoder.decode(fullBuffer)
                 await this.plugin.app.vault.create(path, content)

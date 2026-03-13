@@ -152,7 +152,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
   }
 
   private renderDevices(containerEl: HTMLElement): void {
-    const devices: Device[] = this.plugin.settings.devices;
+    const devices : Device[] = Object.values(this.plugin.settings.devices);;
 
     if (!devices.length) {
       new Setting(containerEl).setDesc("No devices yet.");
@@ -186,7 +186,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
       trustStatus: "revoked"
     };
 
-    this.plugin.settings.devices.push(newDevice);
+    this.plugin.settings.devices[newDevice.id] = newDevice;
     await this.plugin.saveSettings();
 
     new Notice("Device added. Trust will be established via handshake.");

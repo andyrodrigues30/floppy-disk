@@ -144,8 +144,9 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
           .onClick(() => {
             new PairDeviceModal(
               this.app,
+              this.plugin,
               this.plugin.webrtcManager,
-              "" // no deviceId required yet
+              this.plugin.settings.deviceId
             ).open();
           })
       );

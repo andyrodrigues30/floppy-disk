@@ -11,8 +11,7 @@ import {
     FileChunkMessage,
     HandshakeMessage,
     HandshakeAckMessage,
-    FileCompleteMessage,
-    TrustRequestMessage
+    FileCompleteMessage
 } from "types/messages"
 import {
     isConflictNotificationMessage,
@@ -23,7 +22,6 @@ import {
     isHandshakeMessage,
     isManifestResponseMessage,
     isRequestManifestMessage,
-    isTrustRequestMessage
 } from "utils/messageGuards"
 
 const CHUNK_SIZE = 64 * 1024;
@@ -84,8 +82,6 @@ export class WebRTCManager {
                     await this.handleHandshake(parsed)
                 } else if (isHandshakeAckMessage(parsed)) {
                     console.warn("Handshake ack from", deviceId, parsed.accepted)
-                } else if (isTrustRequestMessage(parsed)) {
-                    await this.handleTrustRequest(parsed);
                 } else {
                     console.warn("Unknown message received", parsed)
                 }
@@ -230,12 +226,6 @@ export class WebRTCManager {
             return false;
         }
 
-        // only trusted devices can handshake
-        if (remoteDevice.trustStatus !== "trusted") {
-            console.warn(`Handshake failed: device ${remoteDeviceId} is not trusted`);
-            return false;
-        }
-
         try {
             const connection: RTCPeerConnection = new RTCPeerConnection();
             const channel: RTCDataChannel = connection.createDataChannel("handshake");
@@ -316,74 +306,30 @@ export class WebRTCManager {
         deviceId: string,
         publicKey: string
     ): Promise<void> {
-
-        // update settings trust status
-        const device = this.plugin.settings.devices.find(
-            d => d.id === deviceId
-        );
-
-        if (device) {
-            device.trustStatus = "trusted";
-            device.publicKey = JSON.stringify(publicKey);
-        }
-
-        await this.plugin.saveSettings();
-
-        // update snapshot metadata
-        if (!this.plugin.snapshotManager) return;
-
         const snapshot = await this.plugin.snapshotManager.loadSnapshot();
         const now = Date.now();
 
-        const publicKeyString = JSON.stringify(publicKey);
+        const existing = snapshot.devices[deviceId];
 
-        if (!snapshot.devices[deviceId]) {
-            snapshot.devices[deviceId] = {
-                deviceId,
-                name: device?.name ?? deviceId,
-                lastSeen: now,
-                lastSyncedAt: 0,
-                files: {},
-                publicKey: publicKeyString
-            };
+        if (existing) {
+            existing.trustStatus = "trusted";
+            existing.publicKey = publicKey;
+            existing.lastSeen = now;
         } else {
-            snapshot.devices[deviceId].lastSeen = now;
-            snapshot.devices[deviceId].publicKey = publicKeyString;
+            snapshot.devices[deviceId] = {
+                id: deviceId,
+                name: deviceId,
+                publicKey,
+                fingerprint: await FloppyDiskCrypto.computeFingerprint(publicKey),
+                addedAt: now,
+                lastSeen: now,
+                trustStatus: "trusted",
+                lastSyncedAt: 0,
+                files: {}
+            };
         }
 
         await this.plugin.snapshotManager.saveSnapshot();
-    }
-
-    private async handleTrustRequest(msg: TrustRequestMessage): Promise<void> {
-        console.warn("received trust request from", msg.deviceId);
-
-        if (!msg.publicKey) return;
-
-        const now = Date.now();
-
-        const devices = this.plugin.settings.devices;
-
-        const existing = devices.find(d => d.id === msg.deviceId);
-
-        const updatedDevice = {
-            id: msg.deviceId,
-            name: msg.deviceName ?? msg.deviceId,
-            publicKey: msg.publicKey,
-            fingerprint: msg.fingerprint,
-            addedAt: existing?.addedAt ?? now,
-            trustStatus: "trusted" as const
-        };
-
-        if (!existing) {
-            devices.push(updatedDevice);
-        } else {
-            const index = devices.findIndex(d => d.id === msg.deviceId);
-            devices[index] = updatedDevice;
-        }
-
-        await this.plugin.saveSettings();
-
-        new Notice("Device automatically trusted");
     }
 
     public async sendFileInChunks(deviceId: string, path: string) {

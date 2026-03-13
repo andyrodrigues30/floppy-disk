@@ -3,7 +3,6 @@ import {
     FileChunkMessage, FileCompleteMessage, FileRequestMessage,
     HandshakeAckMessage, HandshakeMessage,
     ManifestResponseMessage, RequestManifestMessage,
-    TrustRequestMessage
 } from "types/messages";
 
 export function isRequestManifestMessage(obj: unknown): obj is RequestManifestMessage {
@@ -77,18 +76,4 @@ export function isHandshakeAckMessage(obj: unknown): obj is HandshakeAckMessage 
         (obj as BaseMessage).type === "HANDSHAKE_ACK" &&
         typeof (obj as HandshakeAckMessage).accepted === "boolean"
     )
-}
-
-export function isTrustRequestMessage(msg: unknown): msg is TrustRequestMessage {
-  if (typeof msg !== "object" || msg === null) return false;
-
-  const m = msg as Record<string, unknown>;
-
-  return (
-    m.type === "TRUST_REQUEST" &&
-    typeof m.deviceId === "string" &&
-    typeof m.publicKey === "string" &&
-    typeof m.fingerprint === "string" &&
-    (m.deviceName === undefined || typeof m.deviceName === "string")
-  );
 }

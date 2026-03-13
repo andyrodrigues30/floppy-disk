@@ -51,11 +51,3 @@ export interface HandshakeAckMessage extends BaseMessage {
   type: "HANDSHAKE_ACK";
   accepted: boolean;
 }
-
-export interface TrustRequestMessage {
-  type: "TRUST_REQUEST";
-  deviceId: string;
-  publicKey: string;
-  fingerprint: string;
-  deviceName?: string;
-}

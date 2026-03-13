@@ -3,6 +3,7 @@ import FloppyDiskPlugin from "main";
 import { FloppyDiskCrypto } from "utils/cryptoHelper";
 import { DeviceRow } from "ui/DeviceRow";
 import { Device } from "types/device";
+import { PairDeviceModal } from "ui/PairDeviceModal";
 
 export class FloppyDiskSettingsTab extends PluginSettingTab {
   declare plugin: FloppyDiskPlugin;
@@ -128,6 +129,21 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
         text.inputEl.classList.add("settings-public-key");
       })
+
+    new Setting(containerEl)
+      .setName("Pair Device")
+      .setDesc("Start or complete device pairing")
+      .addButton(btn =>
+        btn
+          .setButtonText("Pair Device")
+          .onClick(() => {
+            new PairDeviceModal(
+              this.app,
+              this.plugin.webrtcManager,
+              "" // no deviceId required yet
+            ).open();
+          })
+      );
   }
 
   private renderDevices(containerEl: HTMLElement): void {

@@ -21,7 +21,6 @@ export class PairDeviceModal extends Modal {
       .setName("Create Pair Code")
       .addButton(btn =>
         btn.setButtonText("Generate")
-          .setCta()
           .onClick(async () => {
             const offer = await this.webrtc.createPairingOffer(this.deviceId);
             await navigator.clipboard.writeText(offer);
@@ -43,6 +42,7 @@ export class PairDeviceModal extends Modal {
     new Setting(contentEl)
       .addButton(btn =>
         btn.setButtonText("Submit")
+          .setCta()
           .onClick(async () => {
             try {
               const parsed = JSON.parse(input);

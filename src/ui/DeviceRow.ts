@@ -26,7 +26,6 @@ export class DeviceRow {
 
   private renderActions(setting: Setting): void {
     switch (this.device.trustStatus) {
-
       case "trusted":
         setting.addButton((btn) =>
           btn
@@ -37,22 +36,6 @@ export class DeviceRow {
               await this.plugin.saveSettings();
               new Notice("Trust revoked.");
               this.plugin.settingsTab?.display();
-            })
-        );
-        break;
-
-      default:
-        // add pair button for non-trusted devices
-        setting.addButton((btn) =>
-          btn
-            .setCta()
-            .setButtonText("Pair")
-            .onClick(() => {
-              new PairDeviceModal(
-                this.plugin.app,
-                this.plugin.webrtcManager,
-                this.device.id
-              ).open();
             })
         );
         break;

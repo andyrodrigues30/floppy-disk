@@ -17,9 +17,14 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
+    // this device section
     new Setting(containerEl).setName("This device").setHeading();
     this.renderCurrentDevice(containerEl);
 
+    // add device section
+    this.renderAddDevice(containerEl);
+    
+    // trusted devices
     new Setting(containerEl).setName("Trusted devices").setHeading();
     this.renderTrustedDevices(containerEl);
   }
@@ -81,6 +86,62 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
             this.display();
           })
       );
+  }
+
+  private renderAddDevice(containerEl: HTMLElement): void {
+    let deviceId = "";
+    let publicKey = "";
+
+    new Setting(containerEl).setName("Add device").setHeading()
+      .addButton((btn) =>
+        btn
+          .setCta()
+          .setButtonText("Add device")
+          .onClick(async (): Promise<void> => {
+            if (!publicKey || !deviceId) {
+              new Notice("Device ID and Public Key required.");
+              return;
+            }
+            await this.addDevice(deviceId, publicKey);
+            await this.plugin.saveSettings();
+            new Notice("Device added (pending).");
+            this.display();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Device ID")
+      .setDesc("In device settings of the device to add")
+      .addText((text) => {
+        text
+          .onChange((value: string) => {
+            deviceId = value.trim()
+          })
+      });
+
+    new Setting(containerEl)
+      .setName("Public key")
+      .addTextArea((text) => {
+        text
+          .onChange((value: string) => {
+            publicKey = value.trim();
+          });
+
+        text.inputEl.classList.add("settings-public-key");
+      })
+  }
+
+  private renderPendingDevices(containerEl: HTMLElement): void {
+    const pending: Device[] = this.plugin.settings.devices.filter(isPendingDevice);
+
+    if (!pending.length) {
+      new Setting(containerEl).setDesc("No pending devices.");
+      return;
+    }
+
+    pending.forEach((device) => {
+      new DeviceRow(containerEl, this.plugin, device).render();
+    });
   }
 
   private renderTrustedDevices(containerEl: HTMLElement): void {

@@ -192,6 +192,8 @@ export class WebRTCManager {
     private async handleHandshake(msg: HandshakeMessage): Promise<void> {
         console.warn("received handshake from", msg.deviceId);
 
+        console.warn("HANDSHAKE RECEIVED:", msg.deviceId);
+
         let accepted = false;
 
         try {
@@ -415,6 +417,7 @@ export class WebRTCManager {
         deviceId: string,
         publicKey: string
     ): Promise<void> {
+        console.warn("Updating trusted device:", deviceId);
         const snapshot = await this.plugin.snapshotManager.loadSnapshot();
         const now = Date.now();
 

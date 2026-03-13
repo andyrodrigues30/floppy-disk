@@ -30,6 +30,7 @@ const CHUNK_SIZE = 64 * 1024;
 export class WebRTCManager {
     private plugin: FloppyDiskPlugin;
     private remoteDevices: Map<string, RemoteDevice> = new Map();
+    private pairingSessions: Map<string, RTCPeerConnection> = new Map();
     private channels: Record<string, RTCDataChannel> = {};
     private fileBuffers: Record<string, Uint8Array[]> = {};
 
@@ -39,15 +40,19 @@ export class WebRTCManager {
 
     // connect to a device
     public connect(deviceId: string, channel: RTCDataChannel) {
-        this.channels[deviceId] = channel
+        this.channels[deviceId] = channel;
 
-        channel.onmessage = async (event: MessageEvent<string | ArrayBuffer>) => {
-            await this.handleMessage(deviceId, event.data)
-        }
+        channel.onopen = async () => {
+            await this.startHandshake(deviceId);
+        };
+
+        channel.onmessage = async (event) => {
+            await this.handleMessage(deviceId, event.data);
+        };
 
         channel.onclose = () => {
-            delete this.channels[deviceId]
-        }
+            delete this.channels[deviceId];
+        };
     }
 
     // send message to a connected device
@@ -161,6 +166,27 @@ export class WebRTCManager {
             payload: manifest
         }
         this.sendMessage(deviceId, msg)
+    }
+
+    private async startHandshake(deviceId: string): Promise<void> {
+        const device = this.plugin.settings.thisDevice;
+
+        const payload = new TextEncoder().encode(device.fingerprint);
+
+        const signature = await FloppyDiskCrypto.signData(
+            device.signingKeyPair.privateKey,
+            payload.buffer
+        );
+
+        const handshake: HandshakeMessage = {
+            type: "HANDSHAKE",
+            deviceId: device.id,
+            fingerprint: device.fingerprint,
+            signature: Array.from(new Uint8Array(signature)),
+            publicKey: device.publicKey
+        };
+
+        this.sendMessage(deviceId, handshake);
     }
 
     private async handleHandshake(msg: HandshakeMessage): Promise<void> {
@@ -300,45 +326,40 @@ export class WebRTCManager {
     public async createPairingOffer(): Promise<string> {
         const connection = new RTCPeerConnection();
 
-        // Create data channel (offerer must create it)
         const channel = connection.createDataChannel("pairing");
 
-        // Store temporarily (no device yet)
+        // create deterministic session id
         const sessionId = crypto.randomUUID();
 
-        this.remoteDevices.set(sessionId, {
-            device: null as any,
-            connection,
-            channel,
-        });
+        this.pairingSessions.set(sessionId, connection);
 
         const offer = await connection.createOffer();
         await connection.setLocalDescription(offer);
 
         return JSON.stringify({
             type: "PAIR_OFFER",
-            offer: connection.localDescription,
+            sessionId,
+            offer: connection.localDescription
         });
     }
 
-    public async acceptPairingOffer(offerMessage: PairingOfferMessage): Promise<string> {
-        if (!offerMessage?.offer) {
+    public async acceptPairingOffer(
+        offerMessage: PairingOfferMessage
+    ): Promise<string> {
+
+        if (!offerMessage?.offer || !offerMessage?.sessionId) {
             throw new Error("Invalid pairing offer");
         }
 
         const connection = new RTCPeerConnection();
 
-        // listen for data channel from offerer
+        this.pairingSessions.set(offerMessage.sessionId, connection);
+
         connection.ondatachannel = (event) => {
             const channel = event.channel;
 
-            const sessionId = crypto.randomUUID();
-
-            this.remoteDevices.set(sessionId, {
-                device: null as any,
-                connection,
-                channel,
-            });
+            // register channel immediately
+            this.connect(offerMessage.sessionId, channel);
         };
 
         await connection.setRemoteDescription(
@@ -350,30 +371,32 @@ export class WebRTCManager {
 
         return JSON.stringify({
             type: "PAIR_ANSWER",
-            answer: connection.localDescription,
+            sessionId: offerMessage.sessionId,
+            answer: connection.localDescription
         });
     }
 
-    public async completePairing(answerMessage: PairingAnswerMessage): Promise<void> {
-        if (!answerMessage?.answer) {
+    public async completePairing(
+        answerMessage: PairingAnswerMessage
+    ): Promise<void> {
+
+        if (!answerMessage?.answer || !answerMessage?.sessionId) {
             throw new Error("Invalid pairing answer");
         }
 
-        // find the active pairing connection
-        const session = Array.from(this.remoteDevices.values())
-            .find((r) => r.connection.signalingState !== "stable");
+        const connection = this.pairingSessions.get(answerMessage.sessionId);
 
-        if (!session) {
-            throw new Error("No active pairing session");
+        if (!connection) {
+            throw new Error("Pairing session not found");
         }
 
-        await session.connection.setRemoteDescription(
+        await connection.setRemoteDescription(
             new RTCSessionDescription(answerMessage.answer)
         );
 
-        // now connection is established
+        this.pairingSessions.delete(answerMessage.sessionId);
     }
-    
+
     // verify a signature given public key and data
     private async verifySignature(
         publicKey: CryptoKey,

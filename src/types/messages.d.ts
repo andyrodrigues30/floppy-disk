@@ -43,8 +43,8 @@ export interface HandshakeMessage extends BaseMessage {
   type: "HANDSHAKE";
   deviceId: string;
   publicKey: string;
-    fingerprint: string;
-  signature: ArrayBuffer;
+  fingerprint: string;
+  signature: number[];
 }
 
 export interface HandshakeAckMessage extends BaseMessage {

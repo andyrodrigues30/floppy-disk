@@ -5,11 +5,13 @@ export interface RTCSessionPayload {
 
 export interface PairingOfferMessage {
   type: "PAIR_OFFER";
+  sessionId: string;
   offer: RTCSessionPayload;
 }
 
 export interface PairingAnswerMessage {
   type: "PAIR_ANSWER";
+  sessionId: string;
   answer: RTCSessionPayload;
 }
 

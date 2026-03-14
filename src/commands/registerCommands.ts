@@ -1,7 +1,6 @@
 import FloppyDiskPlugin from "../main";
-import { syncVault } from "utils/syncVault";
-import { SYNC_VIEW_TYPE } from "ui/SyncView";
-import { App, Notice } from "obsidian";
+import { syncVault, toggleSyncPanel } from "utils/syncVault";
+import { Notice } from "obsidian";
 
 export function registerCommands(plugin: FloppyDiskPlugin): void {
     plugin.addCommand({

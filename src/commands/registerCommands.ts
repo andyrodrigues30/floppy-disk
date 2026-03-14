@@ -30,6 +30,18 @@ export function registerCommands(plugin: FloppyDiskPlugin): void {
     });
 
     plugin.addCommand({
+        id: "close-sync-panel",
+        name: "Close sync panel",
+        callback: async () => {
+            const leaves = plugin.app.workspace.getLeavesOfType(SYNC_VIEW_TYPE);
+
+            for (const leaf of leaves) {
+                leaf.detach();
+            }
+        },
+    });
+
+    plugin.addCommand({
         id: "regenerate-keys",
         name: "Regenerate device keys",
         callback: async () => {

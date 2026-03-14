@@ -5,7 +5,7 @@ import { DEFAULT_SETTINGS } from "settings/defaults";
 import { FloppyDiskSettingsTab } from "settings/FloppyDiskSettingsTab";
 import { registerCommands } from "./commands/registerCommands";
 import { SYNC_VIEW_TYPE, SyncView } from "ui/SyncView";
-import { syncVault } from "utils/syncVault";
+import { toggleSyncPanel } from "utils/syncVault";
 import { createThisDevice } from "utils/device";
 import { Device } from "types/device";
 import { FloppyDiskSettings } from "types/settings";
@@ -56,18 +56,7 @@ export default class FloppyDiskPlugin extends Plugin {
     this.addSettingTab(this.settingsTab);
 
     // ribbon icon - open sync panel
-    this.addRibbonIcon("refresh-cw", "Sync vault", async () => {
-      const leaf = this.app.workspace.getRightLeaf(false);
-      if (leaf) {
-        await leaf.setViewState({
-          type: SYNC_VIEW_TYPE,
-          active: true,
-        });
-        await this.app.workspace.revealLeaf(leaf);
-      } else {
-        new Notice("Cannot open sync panel.")
-      }
-    });
+    this.addRibbonIcon("refresh-cw", "Open sync panel", async () => toggleSyncPanel(this.app));
   }
 
   onunload() {

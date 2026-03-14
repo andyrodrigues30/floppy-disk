@@ -1,6 +1,6 @@
 import { Setting, Notice } from "obsidian";
 import FloppyDiskPlugin from "../main";
-import { Device, RevokedDevice } from "types/device";
+import { Device } from "types/device";
 
 export class DeviceRow {
   private plugin: FloppyDiskPlugin;
@@ -13,12 +13,8 @@ export class DeviceRow {
     this.deviceId = device.id;
   }
 
-  private get device(): Device | undefined {
-    return this.plugin.settings.devices[this.deviceId];
-  }
-
   render(): void {
-    const device = this.device;
+    const device = this.plugin.settings.devices[this.deviceId];
     if (!device) return;
 
     const setting = new Setting(this.containerEl)

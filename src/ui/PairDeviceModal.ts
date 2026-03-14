@@ -60,12 +60,16 @@ export class PairDeviceModal extends Modal {
     try {
       const parsed = JSON.parse(input.trim());
 
+      console.warn("PARSED", parsed)
+
       // recieve offer
       if (parsed?.type === "PAIR_OFFER") {
         const answer = await this.webrtc.acceptPairingOffer(parsed);
 
         await navigator.clipboard.writeText(answer);
         new Notice("Answer copied. Send it back to the other device.");
+        
+        this.close();
         return;
       }
 
@@ -74,8 +78,8 @@ export class PairDeviceModal extends Modal {
         await this.webrtc.completePairing(parsed);
 
         // trust after pairing
-        if (parsed.deviceId && parsed.publicKey) {
-          await this.webrtc.updateTrustedDevice(parsed.deviceId, parsed.publicKey);
+        if (parsed.deviceId && parsed.deviceName && parsed.publicKey) {
+          await this.webrtc.updateTrustedDevice(parsed.deviceId, parsed.deviceName, parsed.publicKey);
         }
 
         await this.plugin.saveSettings();

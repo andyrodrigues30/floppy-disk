@@ -51,26 +51,10 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Device ID")
       .setDesc(device.id)
-      .addButton((btn) =>
-        btn
-          .setButtonText("Copy")
-          .onClick(() => {
-            void navigator.clipboard.writeText(device.id);
-            new Notice("Device ID copied.");
-          })
-      );
 
     new Setting(containerEl)
       .setName("Public key")
       .setDesc(device.publicKey)
-      .addButton((btn) =>
-        btn
-          .setButtonText("Copy")
-          .onClick(() => {
-            void navigator.clipboard.writeText(device.publicKey);
-            new Notice("Public key copied.");
-          })
-      );
 
     new Setting(containerEl)
       .setName("Fingerprint")

@@ -42,6 +42,7 @@ export interface ConflictNotificationMessage extends BaseMessage {
 export interface HandshakeMessage extends BaseMessage {
   type: "HANDSHAKE";
   deviceId: string;
+  deviceName?: string;
   publicKey: string;
   fingerprint: string;
   signature: number[];

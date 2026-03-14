@@ -23,7 +23,8 @@ import {
     isManifestResponseMessage,
     isRequestManifestMessage,
 } from "utils/messageGuards"
-import { PairingAnswerMessage, PairingOfferMessage } from "types/pairing"
+import { PairingOfferMessage, PairingAnswerMessage } from "types/pairing"
+import { isTextFile } from "utils/isTextFile"
 
 const CHUNK_SIZE = 64 * 1024;
 
@@ -181,9 +182,10 @@ export class WebRTCManager {
         const handshake: HandshakeMessage = {
             type: "HANDSHAKE",
             deviceId: device.id,
+            deviceName: this.plugin.settings.deviceName ?? device.id,
+            publicKey: device.publicKey,
             fingerprint: device.fingerprint,
-            signature: Array.from(new Uint8Array(signature)),
-            publicKey: device.publicKey
+            signature: Array.from(new Uint8Array(signature))
         };
 
         this.sendMessage(deviceId, handshake);
@@ -229,7 +231,11 @@ export class WebRTCManager {
             if (accepted) {
                 console.warn("handshake verified. device trusted:", msg.deviceId);
 
-                await this.updateTrustedDevice(msg.deviceId, msg.publicKey);
+                await this.updateTrustedDevice(
+                    msg.deviceId,
+                    msg.deviceName?? msg.deviceId,
+                    msg.publicKey
+                );
             } else {
                 console.warn("handshake signature invalid:", msg.deviceId);
             }
@@ -281,6 +287,7 @@ export class WebRTCManager {
                 const handshakeMsg = {
                     type: "HANDSHAKE",
                     deviceId: this.plugin.settings.thisDevice.id,
+                    deviceName: this.plugin.settings.thisDevice.name,
                     fingerprint: this.plugin.settings.thisDevice.fingerprint,
                     signature: Array.from(new Uint8Array(signature)),
                     publicKey: this.plugin.settings.thisDevice.publicKey,
@@ -328,9 +335,8 @@ export class WebRTCManager {
     public async createPairingOffer(): Promise<string> {
         const connection = new RTCPeerConnection();
 
-        const channel = connection.createDataChannel("pairing");
+        connection.createDataChannel("pairing");
 
-        // create deterministic session id
         const sessionId = crypto.randomUUID();
 
         this.pairingSessions.set(sessionId, connection);
@@ -338,65 +344,89 @@ export class WebRTCManager {
         const offer = await connection.createOffer();
         await connection.setLocalDescription(offer);
 
-        return JSON.stringify({
+        const device = this.plugin.settings.thisDevice;
+
+        const message: PairingOfferMessage = {
             type: "PAIR_OFFER",
             sessionId,
-            offer: connection.localDescription
-        });
+            deviceId: device.id,
+            deviceName: this.plugin.settings.deviceName ?? device.id,
+            publicKey: device.publicKey,
+            fingerprint: device.fingerprint,
+            offer: {
+                type: offer.type,
+                sdp: offer.sdp ?? "",
+            },
+        };
+
+        return JSON.stringify(message);
     }
 
     public async acceptPairingOffer(
-        offerMessage: PairingOfferMessage
+        offerMsg: PairingOfferMessage
     ): Promise<string> {
-
-        if (!offerMessage?.offer || !offerMessage?.sessionId) {
-            throw new Error("Invalid pairing offer");
-        }
-
         const connection = new RTCPeerConnection();
 
-        this.pairingSessions.set(offerMessage.sessionId, connection);
-
-        connection.ondatachannel = (event) => {
-            const channel = event.channel;
-
-            // register channel immediately
-            this.connect(offerMessage.sessionId, channel);
+        const offer: RTCSessionDescriptionInit = {
+            type: offerMsg.offer.type,
+            sdp: offerMsg.offer.sdp,
         };
 
-        await connection.setRemoteDescription(
-            new RTCSessionDescription(offerMessage.offer)
-        );
+        await connection.setRemoteDescription(offer);
 
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
 
-        return JSON.stringify({
+        this.pairingSessions.set(offerMsg.sessionId, connection);
+
+        // Trust the device that sent the offer
+        await this.updateTrustedDevice(
+            offerMsg.deviceId,
+            offerMsg.deviceName ?? offerMsg.deviceId,
+            offerMsg.publicKey
+        );
+
+        const device = this.plugin.settings.thisDevice;
+
+        const answerMessage: PairingAnswerMessage = {
             type: "PAIR_ANSWER",
-            sessionId: offerMessage.sessionId,
-            answer: connection.localDescription
-        });
+            sessionId: offerMsg.sessionId,
+            deviceId: device.id,
+            deviceName: this.plugin.settings.deviceName ?? device.id,
+            publicKey: device.publicKey,
+            fingerprint: device.fingerprint,
+            answer: {
+                type: answer.type,
+                sdp: answer.sdp ?? "",
+            },
+        };
+
+        return JSON.stringify(answerMessage);
     }
 
     public async completePairing(
-        answerMessage: PairingAnswerMessage
+        answerMsg: PairingAnswerMessage
     ): Promise<void> {
-
-        if (!answerMessage?.answer || !answerMessage?.sessionId) {
-            throw new Error("Invalid pairing answer");
-        }
-
-        const connection = this.pairingSessions.get(answerMessage.sessionId);
+        const connection = this.pairingSessions.get(answerMsg.sessionId);
 
         if (!connection) {
-            throw new Error("Pairing session not found");
+            console.warn("Pairing session not found:", answerMsg.sessionId);
+            return;
         }
 
-        await connection.setRemoteDescription(
-            new RTCSessionDescription(answerMessage.answer)
-        );
+        const answer: RTCSessionDescriptionInit = {
+            type: answerMsg.answer.type,
+            sdp: answerMsg.answer.sdp,
+        };
 
-        this.pairingSessions.delete(answerMessage.sessionId);
+        await connection.setRemoteDescription(answer);
+
+        // Trust the answering device
+        await this.updateTrustedDevice(
+            answerMsg.deviceId,
+            answerMsg.deviceName ?? answerMsg.deviceId,
+            answerMsg.publicKey
+        );
     }
 
     // verify a signature given public key and data
@@ -413,35 +443,43 @@ export class WebRTCManager {
         )
     }
 
-    private async updateTrustedDevice(
+    public async updateTrustedDevice(
         deviceId: string,
+        deviceName: string,
         publicKey: string
     ): Promise<void> {
         console.warn("Updating trusted device:", deviceId);
-        const snapshot = await this.plugin.snapshotManager.loadSnapshot();
+
+        // const snapshot = await this.plugin.snapshotManager.loadSnapshot();
         const now = Date.now();
 
-        const existing = snapshot.devices[deviceId];
+        // ensure devices array exists
+        if (!this.plugin.settings.devices) {
+            this.plugin.settings.devices = {};
+        }
+
+        const devices = this.plugin.settings.devices;
+        const fingerprint = await FloppyDiskCrypto.computeFingerprint(publicKey);
+
+        const existing = devices[deviceId];
 
         if (existing) {
             existing.trustStatus = "trusted";
             existing.publicKey = publicKey;
             existing.lastSeen = now;
         } else {
-            snapshot.devices[deviceId] = {
+            devices[deviceId] = {
                 id: deviceId,
-                name: deviceId,
+                name: deviceName ?? deviceId,
                 publicKey,
-                fingerprint: await FloppyDiskCrypto.computeFingerprint(publicKey),
-                addedAt: now,
-                lastSeen: now,
+                fingerprint,
                 trustStatus: "trusted",
-                lastSyncedAt: 0,
-                files: {}
+                addedAt: now,
+                lastSeen: now
             };
         }
 
-        await this.plugin.snapshotManager.saveSnapshot();
+        await this.plugin.saveSettings();
     }
 
     public async sendFileInChunks(deviceId: string, path: string) {
@@ -562,7 +600,7 @@ export class WebRTCManager {
         const file = this.plugin.app.vault.getAbstractFileByPath(path)
 
         if (file instanceof TFile) {
-            if (path.match(/\.(txt|md|csv|json|js|ts)$/i)) {
+            if (isTextFile(path)) {
                 const decoder = new TextDecoder()
                 const content = decoder.decode(fullBuffer)
                 await this.plugin.app.vault.modify(file, content)
@@ -570,7 +608,7 @@ export class WebRTCManager {
                 await this.plugin.app.vault.adapter.writeBinary(path, fullBuffer.buffer)
             }
         } else {
-            if (path.match(/\.(txt|md|csv|json|js|ts)$/i)) {
+            if (isTextFile(path)) {
                 const decoder = new TextDecoder()
                 const content = decoder.decode(fullBuffer)
                 await this.plugin.app.vault.create(path, content)

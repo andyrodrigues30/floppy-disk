@@ -1,17 +1,25 @@
 export interface RTCSessionPayload {
-  type: "offer" | "answer";
+  type: RTCSdpType;
   sdp: string;
 }
 
 export interface PairingOfferMessage {
   type: "PAIR_OFFER";
   sessionId: string;
+  deviceId: string;
+  deviceName?: string;
+  publicKey: string;
+  fingerprint: string;
   offer: RTCSessionPayload;
 }
 
 export interface PairingAnswerMessage {
   type: "PAIR_ANSWER";
   sessionId: string;
+  deviceId: string;
+  deviceName?: string;
+  publicKey: string;
+  fingerprint: string;
   answer: RTCSessionPayload;
 }
 

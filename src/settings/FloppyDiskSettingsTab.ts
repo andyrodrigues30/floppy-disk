@@ -92,6 +92,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
   }
 
   private renderAddDevice(containerEl: HTMLElement): void {
+    let deviceName = "";
     let deviceId = "";
     let publicKey = "";
 
@@ -101,16 +102,26 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
           .setCta()
           .setButtonText("Add device")
           .onClick(async (): Promise<void> => {
-            if (!publicKey || !deviceId) {
-              new Notice("Device ID and Public Key required.");
+            if (!deviceName || !deviceId || !publicKey) {
+              new Notice("Device Name, Device ID, and Public Key required.");
               return;
             }
-            await this.addDevice(deviceId, publicKey);
+            await this.addDevice(deviceName, deviceId, publicKey);
             await this.plugin.saveSettings();
             new Notice("Device added (pending).");
             this.display();
           })
       );
+
+    new Setting(containerEl)
+      .setName("Device name")
+      .setDesc("A friendly recogniseable name")
+      .addText((text) => {
+        text
+          .onChange((value: string) => {
+            deviceName = value.trim()
+          })
+      });
 
     new Setting(containerEl)
       .setName("Device ID")
@@ -144,20 +155,23 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
           .onClick(() => {
             new PairDeviceModal(
               this.app,
+              this.plugin,
               this.plugin.webrtcManager,
-              "" // no deviceId required yet
+              this.plugin.settings.deviceId
             ).open();
           })
       );
   }
 
   private renderDevices(containerEl: HTMLElement): void {
-    const devices: Device[] = this.plugin.settings.devices;
+    const devices: Device[] = Object.values(this.plugin.settings.devices);;
 
     if (!devices.length) {
       new Setting(containerEl).setDesc("No devices yet.");
       return;
     }
+
+    console.warn(devices)
 
     devices.forEach((device) => {
       new DeviceRow(containerEl, this.plugin, device).render();
@@ -166,6 +180,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
   // register device without trust state (trust handled by handshake)
   public async addDevice(
+    deviceName: string,
     deviceId: string,
     publicKey: string
   ): Promise<void> {
@@ -179,14 +194,14 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
     const newDevice: Device = {
       id: deviceId,
-      name: deviceId,
+      name: deviceName,
       publicKey,
       fingerprint: await FloppyDiskCrypto.computeFingerprint(publicKey),
       addedAt: Date.now(),
       trustStatus: "revoked"
     };
 
-    this.plugin.settings.devices.push(newDevice);
+    this.plugin.settings.devices[newDevice.id] = newDevice;
     await this.plugin.saveSettings();
 
     new Notice("Device added. Trust will be established via handshake.");

@@ -15,30 +15,13 @@ export function registerCommands(plugin: FloppyDiskPlugin): void {
     plugin.addCommand({
         id: "open-sync-panel",
         name: "Open sync panel",
-        callback: async () => {
-            const leaf = plugin.app.workspace.getRightLeaf(false);
-            if (leaf) {
-                await leaf.setViewState({
-                    type: SYNC_VIEW_TYPE,
-                    active: true,
-                });
-                await plugin.app.workspace.revealLeaf(leaf);
-            } else {
-                new Notice("Cannot open sync panel.")
-            }
-        },
+        callback: async () => toggleSyncPanel(),
     });
 
     plugin.addCommand({
         id: "close-sync-panel",
         name: "Close sync panel",
-        callback: async () => {
-            const leaves = plugin.app.workspace.getLeavesOfType(SYNC_VIEW_TYPE);
-
-            for (const leaf of leaves) {
-                leaf.detach();
-            }
-        },
+        callback: async () => toggleSyncPanel(),
     });
 
     plugin.addCommand({
@@ -52,4 +35,23 @@ export function registerCommands(plugin: FloppyDiskPlugin): void {
             }
         },
     });
+
+    async function toggleSyncPanel() {
+        const leaves = plugin.app.workspace.getLeavesOfType(SYNC_VIEW_TYPE);
+
+        if (leaves.length > 0) {
+            leaves.forEach(leaf => leaf.detach());
+        } else {
+            const leaf = plugin.app.workspace.getRightLeaf(false);
+            if (leaf) {
+                await leaf.setViewState({
+                    type: SYNC_VIEW_TYPE,
+                    active: true,
+                });
+                await plugin.app.workspace.revealLeaf(leaf);
+            } else {
+                new Notice("Cannot open sync panel.")
+            }
+        }
+    }
 }

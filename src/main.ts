@@ -41,24 +41,32 @@ export default class FloppyDiskPlugin extends Plugin {
       (leaf) => new SyncView(leaf, this)
     );
 
-    
+
     await this.ensureDeviceId();
     this.settings.vaultId = this.app.vault.getName();
-    
+
     // create managers AFTER deviceId exists
     this.snapshotManager = new SnapshotManager(this.app, this.settings);
     await this.snapshotManager.ensureSnapshotExists();
-    
+
     this.webrtcManager = new WebRTCManager(this);
-    
+
     // add settings tab
     this.settingsTab = new FloppyDiskSettingsTab(this.app, this, this.webrtcManager, this.settings.deviceId);
     this.addSettingTab(this.settingsTab);
 
-    // ribbon icon
+    // ribbon icon - open sync panel
     this.addRibbonIcon("refresh-cw", "Sync vault", async () => {
-      new Notice("Syncing vault...");
-      await syncVault(this.app, this.snapshotManager, this.webrtcManager);
+      const leaf = this.app.workspace.getRightLeaf(false);
+      if (leaf) {
+        await leaf.setViewState({
+          type: SYNC_VIEW_TYPE,
+          active: true,
+        });
+        await this.app.workspace.revealLeaf(leaf);
+      } else {
+        new Notice("Cannot open sync panel.")
+      }
     });
   }
 

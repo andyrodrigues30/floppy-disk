@@ -3,14 +3,17 @@ import FloppyDiskPlugin from "main";
 import { FloppyDiskCrypto } from "utils/cryptoHelper";
 import { DeviceRow } from "ui/DeviceRow";
 import { Device } from "types/device";
-import { PairDeviceModal } from "ui/PairDeviceModal";
+import { WebRTCManager } from "core/WebRTCManager";
 
 export class FloppyDiskSettingsTab extends PluginSettingTab {
   declare plugin: FloppyDiskPlugin;
+  private webrtc: WebRTCManager;
+  private deviceId: string;
 
-  constructor(app: App, plugin: FloppyDiskPlugin) {
+  constructor(app: App, plugin: FloppyDiskPlugin, webrtc: WebRTCManager, deviceId: string) {
     super(app, plugin);
-    this.plugin = plugin;
+    this.webrtc = webrtc;
+    this.deviceId = deviceId;
   }
 
   display(): void {
@@ -21,11 +24,8 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     new Setting(containerEl).setName("This device").setHeading();
     this.renderCurrentDevice(containerEl);
 
-    // add device section
-    this.renderAddDevice(containerEl);
-
     // pair device section
-    this.renderPairDevice(containerEl)
+    this.renderPairDevice(containerEl);
 
     // trusted devices
     new Setting(containerEl).setName("Devices").setHeading();
@@ -91,76 +91,38 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
       );
   }
 
-  private renderAddDevice(containerEl: HTMLElement): void {
-    let deviceName = "";
-    let deviceId = "";
-    let publicKey = "";
+  private renderPairDevice(containerEl: HTMLElement): void {
+    new Setting(containerEl)
+      .setName("Pair new device").setHeading()
 
-    new Setting(containerEl).setName("Add device").setHeading()
-      .addButton((btn) =>
+    new Setting(containerEl)
+      .setName("Copy code")
+      .setDesc("Add this to other device")
+      .addButton(btn =>
         btn
-          .setCta()
-          .setButtonText("Add device")
-          .onClick(async (): Promise<void> => {
-            if (!deviceName || !deviceId || !publicKey) {
-              new Notice("Device Name, Device ID, and Public Key required.");
-              return;
-            }
-            await this.addDevice(deviceName, deviceId, publicKey);
-            await this.plugin.saveSettings();
-            new Notice("Device added (pending).");
-            this.display();
-          })
+          .setButtonText("Copy")
+          .onClick(async () => await this.copyPairCode())
       );
 
+    let pairCode = "";
     new Setting(containerEl)
-      .setName("Device name")
-      .setDesc("A friendly recogniseable name")
-      .addText((text) => {
-        text
-          .onChange((value: string) => {
-            deviceName = value.trim()
-          })
-      });
-
-    new Setting(containerEl)
-      .setName("Device ID")
-      .setDesc("In device settings of the device to add")
-      .addText((text) => {
-        text
-          .onChange((value: string) => {
-            deviceId = value.trim()
-          })
-      });
-
-    new Setting(containerEl)
-      .setName("Public key")
+      .setName("Pair code")
+      .setDesc("Code generated from other device")
       .addTextArea((text) => {
         text
           .onChange((value: string) => {
-            publicKey = value.trim();
+            pairCode = value.trim();
           });
 
-        text.inputEl.classList.add("settings-public-key");
+        text.inputEl.classList.add("settings-pair-code");
       })
-  }
-
-  private renderPairDevice(containerEl: HTMLElement): void {
-    new Setting(containerEl)
-      .setName("Pair Device").setHeading()
-      .setDesc("Start or complete device pairing")
-      .addButton(btn =>
+      .addButton((btn) =>
         btn
-          .setButtonText("Pair Device")
-          .onClick(() => {
-            new PairDeviceModal(
-              this.app,
-              this.plugin,
-              this.plugin.webrtcManager,
-              this.plugin.settings.deviceId
-            ).open();
-          })
+          .setCta()
+          .setButtonText("Pair devices")
+          .onClick(async (): Promise<void> => await this.submitPairCode(pairCode))
       );
+
   }
 
   private renderDevices(containerEl: HTMLElement): void {
@@ -170,8 +132,6 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
       new Setting(containerEl).setDesc("No devices yet.");
       return;
     }
-
-    console.warn(devices)
 
     devices.forEach((device) => {
       new DeviceRow(containerEl, this.plugin, device).render();
@@ -237,5 +197,50 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     if (device.trustStatus === "revoked") return "Revoked";
     if (device.trustStatus === "trusted") return "Trusted";
     return "Added";
+  }
+
+  private async copyPairCode() {
+    const offer = await this.webrtc.createPairingOffer();
+    await navigator.clipboard.writeText(offer);
+    new Notice("Code copied, add it to the other device.");
+  }
+
+  private async submitPairCode(pairCode: string) {
+    try {
+      const parsed = JSON.parse(pairCode.trim());
+
+      // recieve offer
+      if (parsed?.type === "PAIR_OFFER") {
+        const answer = await this.webrtc.acceptPairingOffer(parsed);
+
+        await navigator.clipboard.writeText(answer);
+        new Notice("Pairing");
+        
+        return;
+      }
+
+      // complete pairing
+      if (parsed?.type === "PAIR_ANSWER") {
+        await this.webrtc.completePairing(parsed);
+
+        // trust after pairing
+        if (parsed.deviceId && parsed.deviceName && parsed.publicKey) {
+          await this.webrtc.updateTrustedDevice(parsed.deviceId, parsed.deviceName, parsed.publicKey);
+        }
+
+        await this.plugin.saveSettings();
+
+        // refresh UI
+        this.plugin.settingsTab?.display();
+
+        new Notice("Pairing complete");
+
+        return;
+      }
+
+      new Notice("Invalid pairing code");
+    } catch {
+      new Notice("Invalid pairing code");
+    }
   }
 }

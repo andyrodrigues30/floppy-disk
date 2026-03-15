@@ -98,15 +98,15 @@ export class SnapshotManager {
 
   // sync state
   public startDeviceSync(deviceId: string) {
-    this.activeSyncs.add(deviceId)
+    this.activeSyncs.add(deviceId);
   }
 
   public pauseDeviceSync(deviceId: string) {
-    this.activeSyncs.delete(deviceId)
+    this.activeSyncs.delete(deviceId);
   }
 
   public isDeviceSyncing(deviceId: string): boolean {
-    return this.activeSyncs.has(deviceId)
+    return this.activeSyncs.has(deviceId);
   }
 
   // progress tracking

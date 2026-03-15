@@ -10,6 +10,7 @@ import { createSyncPlan, executeSync } from "utils/sync";
 export class SyncManager {
   private app: App;
   private plugin: FloppyDiskPlugin;
+  private pausedDevices = new Set<string>();
 
   constructor(app: App, plugin: FloppyDiskPlugin) {
     this.app = app;
@@ -46,9 +47,7 @@ export class SyncManager {
 
         this.plugin.syncProgress.phase = "conflict";
 
-        new Notice(
-          `Sync paused: ${conflicts.length} conflict(s) detected.`
-        );
+        new Notice(`Sync paused: ${conflicts.length} conflict(s) detected.`);
 
         return; // STOP sync until user resolves
       }
@@ -75,6 +74,82 @@ export class SyncManager {
     }
   }
 
-  // TODO: per-device pause hook
-  pauseDeviceSync(_remoteDeviceId: string) { }
+  public pauseDeviceSync(deviceId: string): void {
+
+    this.pausedDevices.add(deviceId);
+
+    // stop sync phase
+    const progress = this.plugin.syncProgress;
+    progress.phase = "idle";
+    progress.currentFile = undefined;
+
+    // update SnapshotManager UI state
+    this.plugin.snapshotManager.pauseDeviceSync(deviceId);
+
+    console.log(`Sync paused for ${deviceId}`);
+  }
+
+  public async resumeDeviceSync(deviceId: string): Promise<void> {
+    if (!this.pausedDevices.has(deviceId)) {
+      return;
+    }
+
+    this.pausedDevices.delete(deviceId);
+
+    const progress = this.plugin.syncProgress;
+
+    // if conflicts still exist - stay in conflict mode
+    if (progress.conflicts.length > 0) {
+      progress.phase = "conflict";
+      return;
+    }
+
+    progress.phase = "comparing";
+
+    // update UI state
+    this.plugin.snapshotManager.startDeviceSync(deviceId);
+
+    await this.syncDevice(deviceId);
+  }
+
+  public async resolveConflict(
+    remoteDeviceId: string,
+    path: string,
+    choice: "local" | "remote"
+  ): Promise<void> {
+
+    const progress = this.plugin.syncProgress;
+
+    const conflict = progress.conflicts.find(c => c.path === path);
+    if (!conflict) return;
+
+    progress.phase = "conflict";
+    progress.currentFile = path;
+
+    if (choice === "local") {
+      await this.plugin.webrtcManager.sendFileInChunks(
+        remoteDeviceId,
+        path
+      );
+    } else {
+      await this.plugin.webrtcManager.requestFile(
+        remoteDeviceId,
+        path
+      );
+    }
+
+    // remove conflict
+    progress.conflicts = progress.conflicts.filter(
+      c => c.path !== path
+    );
+
+    // if no conflicts remain AND device is not paused - resume
+    if (
+      progress.conflicts.length === 0 &&
+      !this.pausedDevices.has(remoteDeviceId)
+    ) {
+      progress.phase = "comparing";
+      await this.syncDevice(remoteDeviceId);
+    }
+  }
 }

@@ -93,9 +93,9 @@ export class SyncView extends ItemView {
           .onClick(() => {
 
             if (isSyncing) {
-              this.plugin.snapshotManager.pauseDeviceSync(device.id)
+              this.plugin.syncManager.pauseDeviceSync(device.id)
             } else {
-              this.plugin.snapshotManager.startDeviceSync(device.id)
+              this.plugin.syncManager.resumeDeviceSync(device.id)
             }
 
             this.render()

@@ -1,16 +1,24 @@
+export interface StoredKeyPair {
+  publicKeyJwk: JsonWebKey;
+  privateKeyJwk: JsonWebKey;
+}
+
 export interface DeviceKeys {
   signingKeyPair: CryptoKeyPair;
   encryptionKeyPair: CryptoKeyPair;
 }
 
-// Local device
-export interface ThisDevice extends DeviceKeys {
+// local device
+export interface ThisDevice {
   id: string;
-  publicKey: string;
+  name: string;
   fingerprint: string;
-  name?: string;
-  readonly createdAt?: number;
-  privateKey?: CryptoKey;
+  createdAt: number;
+
+  publicKey: string;
+
+  signingKeyPair: StoredKeyPair;
+  encryptionKeyPair: StoredKeyPair;
 }
 
 // Base remote device
@@ -23,7 +31,7 @@ export interface BaseDevice {
   lastSeen?: number;
 }
 
-// Trust status (minimal model)
+// trust status (minimal model)
 export type DeviceTrustStatus =
   | "trusted"
   | "revoked";

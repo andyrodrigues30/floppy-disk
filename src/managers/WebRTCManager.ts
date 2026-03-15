@@ -222,8 +222,12 @@ export class WebRTCManager {
 
         const payload = new TextEncoder().encode(device.fingerprint);
 
+        const privateKey = await FloppyDiskCrypto.importSigningPrivateKey(
+            device.signingKeyPair.privateKeyJwk
+        );
+
         const signature = await FloppyDiskCrypto.signData(
-            device.signingKeyPair.privateKey,
+            privateKey,
             payload.buffer
         );
 
@@ -243,22 +247,16 @@ export class WebRTCManager {
         let accepted = false;
 
         try {
-            const jwk: JsonWebKey = JSON.parse(atob(msg.publicKey));
+            const jwk: JsonWebKey = JSON.parse(msg.publicKey);
 
-            const publicKey = await crypto.subtle.importKey(
-                "jwk",
-                jwk,
-                { name: "ECDSA", namedCurve: "P-256" },
-                true,
-                ["verify"]
-            );
+            const publicKey = await FloppyDiskCrypto.importSigningPublicKey(jwk);
 
             const encoder = new TextEncoder();
             const data = encoder.encode(msg.fingerprint).buffer;
             const signature = new Uint8Array(msg.signature).buffer;
 
-            accepted = await crypto.subtle.verify(
-                { name: "ECDSA", hash: "SHA-256" },
+
+            accepted = await FloppyDiskCrypto.verifySignature(
                 publicKey,
                 signature,
                 data
@@ -268,11 +266,13 @@ export class WebRTCManager {
                 await this.plugin.deviceManager.trustDevice(
                     msg.deviceId,
                     msg.deviceName ?? msg.deviceId,
-                    msg.publicKey
+                    msg.publicKey,
+                    msg.fingerprint
                 );
 
                 this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
             }
+
         } catch (err) {
             console.error("Handshake error:", err);
         }
@@ -430,7 +430,6 @@ export class WebRTCManager {
         }
     }
 
-    // KEEP
     public async reconnectAllDevices(): Promise<void> {
         const devices = this.plugin.deviceManager.getTrustedDevices();
 

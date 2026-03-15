@@ -131,24 +131,38 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
   public async regenerateKeys(): Promise<void> {
     if (!this.plugin.settings.thisDevice) return;
 
-    const newKeys = await FloppyDiskCrypto.generateDeviceKeys();
+    // generate new runtime keys
+    const signingKeys = await FloppyDiskCrypto.generateSigningKeyPair();
+    const encryptionKeys = await FloppyDiskCrypto.generateEncryptionKeyPair();
 
-    const exportedPublicKey = await FloppyDiskCrypto.computeExportedKey(
-      newKeys.signingKeyPair.publicKey
-    );
+    // export signing keys
+    const signingPublicJwk = await FloppyDiskCrypto.exportSigningPublicKey(signingKeys.publicKey);
+    const signingPrivateJwk = await FloppyDiskCrypto.exportSigningPrivateKey(signingKeys.privateKey);
 
-    const publicKeyBase64 = btoa(JSON.stringify(exportedPublicKey));
+    // export encryption keys
+    const encryptionPublicJwk = await FloppyDiskCrypto.exportEncryptionPublicKey(encryptionKeys.publicKey);
+    const encryptionPrivateJwk = await FloppyDiskCrypto.exportEncryptionPrivateKey(encryptionKeys.privateKey);
 
-    const fingerprint =
-      await FloppyDiskCrypto.computeFingerprint(publicKeyBase64);
+    // fingerprint based on signing public key
+    const publicKeyString = JSON.stringify(signingPublicJwk);
+    const fingerprint = await FloppyDiskCrypto.computeFingerprint(publicKeyString);
 
+    // update stored device
     this.plugin.settings.thisDevice = {
       ...this.plugin.settings.thisDevice,
-      publicKey: publicKeyBase64,
+
+      publicKey: publicKeyString,
       fingerprint,
-      signingKeyPair: newKeys.signingKeyPair,
-      encryptionKeyPair: newKeys.encryptionKeyPair,
-      privateKey: newKeys.signingKeyPair.privateKey,
+
+      signingKeyPair: {
+        publicKeyJwk: signingPublicJwk,
+        privateKeyJwk: signingPrivateJwk,
+      },
+
+      encryptionKeyPair: {
+        publicKeyJwk: encryptionPublicJwk,
+        privateKeyJwk: encryptionPrivateJwk,
+      },
     };
 
     await this.plugin.saveSettings();
@@ -185,7 +199,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
         // trust after pairing
         if (parsed.deviceId && parsed.deviceName && parsed.publicKey) {
-          await this.plugin.deviceManager.trustDevice(parsed.deviceId, parsed.deviceName, parsed.publicKey);
+          await this.plugin.deviceManager.trustDevice(parsed.deviceId, parsed.deviceName, parsed.publicKey, parsed.fingerprint);
         }
 
         await this.plugin.saveSettings();

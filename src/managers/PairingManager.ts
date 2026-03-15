@@ -1,6 +1,6 @@
 import FloppyDiskPlugin from "main";
 
-import { PairingOfferMessage, PairingAnswerMessage } from "types/pairing";
+import { PairingAnswerMessage } from "types/pairing";
 
 export class PairingManager {
     private plugin: FloppyDiskPlugin;
@@ -16,7 +16,8 @@ export class PairingManager {
         await this.plugin.deviceManager.trustDevice(
             answerMsg.deviceId,
             answerMsg.deviceName ?? answerMsg.deviceId,
-            answerMsg.publicKey
+            answerMsg.publicKey,
+            answerMsg.fingerprint
         );
 
         // now trigger actual connection

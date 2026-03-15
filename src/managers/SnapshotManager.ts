@@ -91,7 +91,7 @@ export class SnapshotManager {
     if (!this.snapshot) {
       this.snapshot = this.createEmptySnapshot()
     }
-id
+    
     this.snapshot.currentDeviceId = id
     await this.saveSnapshot()
   }
@@ -128,10 +128,7 @@ id
   }
 
   // sync updates
-  public async updateSnapshotAfterSync(
-    remoteDeviceId: string,
-    finalManifest: Manifest
-  ): Promise<Snapshot> {
+  public async updateSnapshotAfterSync(remoteDeviceId: string, finalManifest: Manifest): Promise<Snapshot> {
     const snapshot = await this.loadSnapshot()
 
     if (!snapshot.currentDeviceId) {
@@ -157,10 +154,7 @@ id
     return snapshot
   }
 
-  public async updateFileSync(
-    filePath: string,
-    fileHash: string
-  ): Promise<void> {
+  public async updateFileSync(filePath: string, fileHash: string): Promise<void> {
     const snapshot = await this.loadSnapshot()
 
     if (!snapshot.currentDeviceId) {

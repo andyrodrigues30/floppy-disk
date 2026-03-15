@@ -1,39 +1,39 @@
-import { Platform } from "obsidian"
-
 import { ThisDevice } from "types/device";
-import { DeviceKeys } from "types/device";
 
 import { FloppyDiskCrypto } from "utils/cryptoHelper";
 
-// create the local device with keys
 export async function createThisDevice(): Promise<ThisDevice> {
-  // generate signing + encryption key pairs
-  const keys: DeviceKeys = await FloppyDiskCrypto.generateDeviceKeys();
 
-  // export public key to base64 for fingerprint / display
-  const exportedPublicKey = await FloppyDiskCrypto.computeExportedKey(keys.signingKeyPair.publicKey);
+  // generate key pairs
+  const signingKeys = await FloppyDiskCrypto.generateSigningKeyPair();
+  const encryptionKeys = await FloppyDiskCrypto.generateEncryptionKeyPair();
 
-  const publicKeyBase64 = btoa(JSON.stringify(exportedPublicKey));
+  // export to JWK (for storage)
+  const signingPublicJwk = await FloppyDiskCrypto.exportSigningPublicKey(signingKeys.publicKey);
+  const signingPrivateJwk = await FloppyDiskCrypto.exportSigningPrivateKey(signingKeys.privateKey);
 
-  // compute short fingerprint
-  const fingerprint = await FloppyDiskCrypto.computeFingerprint(publicKeyBase64);
+  const encryptionPublicJwk = await FloppyDiskCrypto.exportEncryptionPublicKey(encryptionKeys.publicKey);
+  const encryptionPrivateJwk = await FloppyDiskCrypto.exportEncryptionPrivateKey(encryptionKeys.privateKey);
+
+  // fingerprint based on public key JWK
+  const publicKeyString = JSON.stringify(signingPublicJwk);
+  const fingerprint = await FloppyDiskCrypto.computeFingerprint(publicKeyString);
+
 
   return {
     id: crypto.randomUUID(),
     name: "This Device",
-    publicKey: publicKeyBase64,
+    publicKey: publicKeyString,
     fingerprint,
     createdAt: Date.now(),
-    signingKeyPair: keys.signingKeyPair,
-    encryptionKeyPair: keys.encryptionKeyPair,
-    privateKey: keys.signingKeyPair.privateKey,
-  };
-}
+    signingKeyPair: {
+      publicKeyJwk: signingPublicJwk,
+      privateKeyJwk: signingPrivateJwk,
+    },
 
-export default function getDefaultDeviceName():string {
-    if (Platform.isMobile) return "Mobile Device"
-    if (Platform.isMacOS) return "Mac"
-    if (Platform.isWin) return "Windows PC"
-    if (Platform.isLinux) return "Linux PC"
-    return "Unknown Device"
+    encryptionKeyPair: {
+      publicKeyJwk: encryptionPublicJwk,
+      privateKeyJwk: encryptionPrivateJwk
+    }
+  };
 }

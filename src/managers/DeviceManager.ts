@@ -64,17 +64,19 @@ export class DeviceManager {
     public async trustDevice(
         id: string,
         name: string,
-        publicKey: string
+        publicKey: string,
+        fingerprint: string
     ): Promise<void> {
+
         const devices = this.plugin.settings.devices;
         const now = Date.now();
 
-        const fingerprint = await FloppyDiskCrypto.computeFingerprint(publicKey);
         const existing = devices[id];
 
         if (existing) {
             existing.trustStatus = "trusted";
             existing.publicKey = publicKey;
+            existing.name = name ?? id;
             existing.lastSeen = now;
         } else {
             devices[id] = {

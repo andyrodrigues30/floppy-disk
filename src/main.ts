@@ -5,7 +5,6 @@ import { DEFAULT_SETTINGS } from "settings/defaults";
 import { FloppyDiskSettingsTab } from "settings/FloppyDiskSettingsTab";
 import { registerCommands } from "commands/registerCommands";
 import { SYNC_VIEW_TYPE, SyncView } from "ui/SyncView";
-import { toggleSyncPanel } from "utils/syncVault";
 import { createThisDevice } from "utils/device";
 import { Device, RemoteDevice } from "types/device";
 import { FloppyDiskSettings } from "types/settings";
@@ -35,20 +34,13 @@ export default class FloppyDiskPlugin extends Plugin {
     // commands
     registerCommands(this);
 
-    // sync view
-    this.registerView(
-      SYNC_VIEW_TYPE,
-      (leaf) => new SyncView(leaf, this)
-    );
-
-
     await this.ensureDeviceId();
     this.settings.vaultId = this.app.vault.getName();
 
     // create managers AFTER deviceId exists
     this.snapshotManager = new SnapshotManager(this.app, this.settings);
     await this.snapshotManager.ensureSnapshotExists();
-    this.snapshotManager.setCurrentDevice(this.settings.deviceId)
+    await this.snapshotManager.setCurrentDevice(this.settings.deviceId)
 
     this.webrtcManager = new WebRTCManager(this);
 
@@ -56,8 +48,14 @@ export default class FloppyDiskPlugin extends Plugin {
     this.settingsTab = new FloppyDiskSettingsTab(this.app, this, this.webrtcManager, this.settings.deviceId);
     this.addSettingTab(this.settingsTab);
 
+    // sync view
+    this.registerView(
+      SYNC_VIEW_TYPE,
+      (leaf) => new SyncView(leaf, this)
+    );
+
     // ribbon icon - open sync panel
-    this.addRibbonIcon("refresh-cw", "Open sync panel", async () => toggleSyncPanel(this.app));
+    this.addRibbonIcon("refresh-cw", "Open sync panel", async () => await SyncView.toggle(this.app))
   }
 
   onunload() {

@@ -1,7 +1,9 @@
 import {
+  App,
   ItemView,
   WorkspaceLeaf,
-  Setting
+  Setting,
+  Notice
 } from "obsidian"
 
 import FloppyDiskPlugin from "main"
@@ -144,4 +146,23 @@ export class SyncView extends ItemView {
       new Setting(container).setDesc(file)
     })
   }
+
+  static async toggle(app: App) {
+    const leaves = app.workspace.getLeavesOfType(SYNC_VIEW_TYPE);
+
+    if (leaves.length > 0) {
+        leaves.forEach(leaf => leaf.detach());
+    } else {
+        const leaf = app.workspace.getRightLeaf(false);
+        if (leaf) {
+            await leaf.setViewState({
+                type: SYNC_VIEW_TYPE,
+                active: true,
+            });
+            await app.workspace.revealLeaf(leaf);
+        } else {
+            new Notice("Cannot open sync panel.")
+        }
+    }
+}
 }

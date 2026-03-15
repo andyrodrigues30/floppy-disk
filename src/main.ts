@@ -1,13 +1,13 @@
 import { Notice, Plugin } from "obsidian";
-import { SnapshotManager } from "core/SnapshotManager";
-import { WebRTCManager } from "core/WebRTCManager";
+import { SnapshotManager } from "managers/SnapshotManager";
+import { WebRTCManager } from "managers/WebRTCManager";
 import { DEFAULT_SETTINGS } from "settings/defaults";
 import { FloppyDiskSettingsTab } from "settings/FloppyDiskSettingsTab";
-import { registerCommands } from "./commands/registerCommands";
+import { registerCommands } from "commands/registerCommands";
 import { SYNC_VIEW_TYPE, SyncView } from "ui/SyncView";
-import { syncVault } from "utils/syncVault";
+import { toggleSyncPanel } from "utils/syncVault";
 import { createThisDevice } from "utils/device";
-import { Device } from "types/device";
+import { Device, RemoteDevice } from "types/device";
 import { FloppyDiskSettings } from "types/settings";
 import { SyncProgress } from "types/sync";
 
@@ -41,31 +41,32 @@ export default class FloppyDiskPlugin extends Plugin {
       (leaf) => new SyncView(leaf, this)
     );
 
-    
+
     await this.ensureDeviceId();
     this.settings.vaultId = this.app.vault.getName();
-    
+
     // create managers AFTER deviceId exists
     this.snapshotManager = new SnapshotManager(this.app, this.settings);
     await this.snapshotManager.ensureSnapshotExists();
-    
+    this.snapshotManager.setCurrentDevice(this.settings.deviceId)
+
     this.webrtcManager = new WebRTCManager(this);
-    
+
     // add settings tab
     this.settingsTab = new FloppyDiskSettingsTab(this.app, this, this.webrtcManager, this.settings.deviceId);
     this.addSettingTab(this.settingsTab);
 
-    // ribbon icon
-    this.addRibbonIcon("refresh-cw", "Sync vault", async () => {
-      new Notice("Syncing vault...");
-      await syncVault(this.app, this.snapshotManager, this.webrtcManager);
-    });
+    // ribbon icon - open sync panel
+    this.addRibbonIcon("refresh-cw", "Open sync panel", async () => toggleSyncPanel(this.app));
   }
 
   onunload() {
     new Notice("Floppy disk plugin unloaded.");
   }
 
+  get remoteDevices(): Map<string, RemoteDevice> {
+    return this.webrtcManager.getRemoteDevices()
+  }
 
   public syncProgress: SyncProgress = {
     phase: "idle",

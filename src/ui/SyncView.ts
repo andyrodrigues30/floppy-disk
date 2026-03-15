@@ -1,85 +1,133 @@
-// TODO: #14 - sync panel
+import {
+  ItemView,
+  WorkspaceLeaf,
+  Setting
+} from "obsidian"
 
-import { ItemView, WorkspaceLeaf } from "obsidian";
-import FloppyDiskPlugin from "main";
+import FloppyDiskPlugin from "main"
+import { SyncProgress } from "types/sync"
+import { Device } from "types/device"
 
-export const SYNC_VIEW_TYPE = "floppy-disk-sync-view";
+export const SYNC_VIEW_TYPE = "floppy-disk-sync-view"
 
 export class SyncView extends ItemView {
-  plugin: FloppyDiskPlugin;
+  plugin: FloppyDiskPlugin
+  selectedDeviceId: string | null = null
 
   constructor(leaf: WorkspaceLeaf, plugin: FloppyDiskPlugin) {
-    super(leaf);
-    this.plugin = plugin;
+    super(leaf)
+    this.plugin = plugin
   }
 
-  getViewType(): string {
-    return SYNC_VIEW_TYPE;
-  }
+  getViewType(): string { return SYNC_VIEW_TYPE }
 
-  getDisplayText(): string {
-    return "Floppy disk sync";
-  }
+  getDisplayText(): string { return "Floppy disk sync" }
 
-  getIcon(): string {
-    return "refresh-cw";
-  }
+  getIcon(): string { return "refresh-cw" }
 
   async onOpen(): Promise<void> {
-    // this.plugin.onSyncUpdate(() => this.render());
-    this.render();
-  }
-
-  async onClose(): Promise<void> {
-    // optional: remove listeners if you add unsubscribe logic
+    this.render()
   }
 
   render(): void {
-    const { contentEl } = this;
-    contentEl.empty();
+    const { contentEl } = this
+    contentEl.empty()
 
-    const progress = this.plugin.syncProgress;
+    this.renderDevicesSection(contentEl)
+    this.renderActivitySection(contentEl, this.selectedDeviceId)
+  }
 
-    const syncHeaderDiv = contentEl.createEl("div", { cls: "sync-header" });
-    syncHeaderDiv.createEl("h2", { text: "Sync status" });
-    syncHeaderDiv.createEl("button", { text: "Refresh" })
-    syncHeaderDiv.onClickEvent(() => this.render());
+  private renderDevicesSection(contentEl: HTMLElement): void {
 
-    // Phase
-    contentEl.createEl("div", {
-      text: `Phase: ${progress.phase}`,
-      cls: "sync-phase",
-    });
+    new Setting(contentEl).setName("Devices").setHeading()
 
-    // Progress Bar
-    const percent =
-      progress.totalFiles === 0
-        ? 0
-        : Math.round(
-          (progress.processedFiles / progress.totalFiles) * 100
-        );
+    const devicesContainer = contentEl.createDiv()
+    const remoteDevices = this.plugin.remoteDevices
 
-    const barContainer = contentEl.createDiv("sync-bar-container");
-    const bar = barContainer.createDiv("sync-bar");
-    bar.style.width = `${percent}%`;
+    const devices: Device[] = Object.values(this.plugin.settings.devices).filter((d: Device) => d.trustStatus === "trusted");
 
-    contentEl.createEl("div", {
-      text: `${progress.processedFiles} / ${progress.totalFiles} files (${percent}%)`,
-      cls: "sync-progress-text",
-    });
-
-    // Current file
-    if (progress.currentFile) {
-      contentEl.createEl("div", {
-        text: `Current: ${progress.currentFile}`,
-        cls: "sync-current-file",
-      });
+    if (!devices) {
+      new Setting(contentEl).setDesc("No devices.")
+      return
     }
 
-    // Change Lists
-    this.renderFileList(contentEl, "Uploads", progress.uploads);
-    this.renderFileList(contentEl, "Downloads", progress.downloads);
-    this.renderFileList(contentEl, "Conflicts", progress.conflicts);
+    devices.forEach((device: Device) => {
+
+      const remote = remoteDevices.get(device.id)
+
+      const connectionStatus =
+        remote?.connection?.connectionState === "connected"
+          ? "Online"
+          : "Offline"
+
+      if (!this.selectedDeviceId) {
+        this.selectedDeviceId = device.id
+      }
+
+      const lastSynced = this.plugin.snapshotManager.getLastSynced(device.id)
+
+      const isSyncing =
+        this.plugin.snapshotManager.isDeviceSyncing(device.id)
+
+      const setting = new Setting(devicesContainer)
+        .setName(device.name ?? device.id)
+        .setDesc(
+          `Connection: ${connectionStatus} | Last Seen: ${
+            device.lastSeen
+              ? new Date(device.lastSeen).toLocaleString()
+              : "Never"
+          } | Last Synced: ${
+            lastSynced
+              ? new Date(lastSynced).toLocaleString()
+              : "Never"
+          }`
+        )
+
+      if (device.id === this.selectedDeviceId) {
+        setting.settingEl.addClass("device-selected")
+      }
+
+      setting.addButton(button => {
+        button
+          .setButtonText(isSyncing ? "Pause" : "Sync")
+          .onClick(() => {
+
+            if (isSyncing) {
+              this.plugin.snapshotManager.pauseDeviceSync(device.id)
+            } else {
+              this.plugin.snapshotManager.startDeviceSync(device.id)
+            }
+
+            this.render()
+          })
+      })
+
+      setting.settingEl.onclick = () => {
+        this.selectedDeviceId = device.id
+        this.render()
+      }
+
+    })
+  }
+
+  private renderActivitySection(
+    contentEl: HTMLElement,
+    selectedDeviceId: string | null
+  ): void {
+
+    if (!selectedDeviceId) return
+    
+    new Setting(contentEl).setName("Activity").setHeading()
+    
+    const progress: SyncProgress | undefined = this.plugin.snapshotManager.getDeviceProgress(selectedDeviceId)
+    if (!progress) {
+      new Setting(contentEl).setDesc("No activity.")
+      return
+    }
+
+    this.renderFileList(contentEl, "Uploads", progress.uploads)
+    this.renderFileList(contentEl, "Downloads", progress.downloads)
+    this.renderFileList(contentEl, "Conflicts", progress.conflicts)
   }
 
   private renderFileList(
@@ -87,13 +135,13 @@ export class SyncView extends ItemView {
     title: string,
     files: string[]
   ): void {
-    if (!files.length) return;
 
-    container.createEl("h3", { text: title });
+    if (files.length === 0) return
 
-    const list = container.createEl("ul");
-    for (const file of files) {
-      list.createEl("li", { text: file });
-    }
+    new Setting(container).setName(title).setHeading()
+
+    files.forEach((file: string) => {
+      new Setting(container).setDesc(file)
+    })
   }
 }

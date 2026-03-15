@@ -1,6 +1,6 @@
-import { Notice, TFile } from "obsidian"
+import { TFile } from "obsidian"
 import FloppyDiskPlugin from "main"
-import { generateManifest } from "./manifest"
+import { generateManifest } from "../utils/manifest"
 import { FloppyDiskCrypto } from "utils/cryptoHelper"
 import { Manifest } from "types/manifest"
 import { Device, RemoteDevice } from "types/device"
@@ -40,20 +40,32 @@ export class WebRTCManager {
     }
 
     // connect to a device
-    public connect(deviceId: string, channel: RTCDataChannel) {
-        this.channels[deviceId] = channel;
+    public connect(deviceId: string, channel: RTCDataChannel, connection: RTCPeerConnection) {
+
+        this.channels[deviceId] = channel
+
+        const device = this.plugin.settings.devices[deviceId]
+
+        if (device) {
+            this.remoteDevices.set(deviceId, {
+                device,
+                connection,
+                channel
+            })
+        }
 
         channel.onopen = async () => {
-            await this.startHandshake(deviceId);
-        };
+            await this.startHandshake(deviceId)
+        }
 
         channel.onmessage = async (event) => {
-            await this.handleMessage(deviceId, event.data);
-        };
+            await this.handleMessage(deviceId, event.data)
+        }
 
         channel.onclose = () => {
-            delete this.channels[deviceId];
-        };
+            delete this.channels[deviceId]
+            this.remoteDevices.delete(deviceId)
+        }
     }
 
     // send message to a connected device
@@ -233,7 +245,7 @@ export class WebRTCManager {
 
                 await this.updateTrustedDevice(
                     msg.deviceId,
-                    msg.deviceName?? msg.deviceId,
+                    msg.deviceName ?? msg.deviceId,
                     msg.publicKey
                 );
             } else {
@@ -441,6 +453,10 @@ export class WebRTCManager {
             signature,
             data
         )
+    }
+
+    public getRemoteDevices(): Map<string, RemoteDevice> {
+        return this.remoteDevices
     }
 
     public async updateTrustedDevice(

@@ -1,6 +1,5 @@
 import FloppyDiskPlugin from "../main";
-import { syncVault } from "utils/syncVault";
-import { SYNC_VIEW_TYPE } from "ui/SyncView";
+import { syncVault, toggleSyncPanel } from "utils/syncVault";
 import { Notice } from "obsidian";
 
 export function registerCommands(plugin: FloppyDiskPlugin): void {
@@ -15,18 +14,13 @@ export function registerCommands(plugin: FloppyDiskPlugin): void {
     plugin.addCommand({
         id: "open-sync-panel",
         name: "Open sync panel",
-        callback: async () => {
-            const leaf = plugin.app.workspace.getRightLeaf(false);
-            if (leaf) {
-                await leaf.setViewState({
-                    type: SYNC_VIEW_TYPE,
-                    active: true,
-                });
-                await plugin.app.workspace.revealLeaf(leaf);
-            } else {
-                new Notice("Cannot open sync panel.")
-            }
-        },
+        callback: async () => toggleSyncPanel(plugin.app),
+    });
+
+    plugin.addCommand({
+        id: "close-sync-panel",
+        name: "Close sync panel",
+        callback: async () => toggleSyncPanel(plugin.app),
     });
 
     plugin.addCommand({
@@ -41,3 +35,4 @@ export function registerCommands(plugin: FloppyDiskPlugin): void {
         },
     });
 }
+

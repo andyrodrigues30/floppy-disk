@@ -110,7 +110,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
   }
 
   private renderDevices(containerEl: HTMLElement): void {
-    const devices: Device[] = Object.values(this.plugin.settings.devices);;
+    const devices: Device[] = Object.values(this.plugin.deviceManager.getDevices());;
 
     if (!devices.length) {
       new Setting(containerEl).setDesc("No devices yet.");
@@ -120,35 +120,6 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     devices.forEach((device) => {
       new DeviceRow(containerEl, this.plugin, device).render();
     });
-  }
-
-  // register device without trust state (trust handled by handshake)
-  public async addDevice(
-    deviceName: string,
-    deviceId: string,
-    publicKey: string
-  ): Promise<void> {
-    if (!publicKey) throw new Error("public key is required");
-
-    const existing = this.plugin.findDevice(deviceId);
-    if (existing) {
-      new Notice("Device already exists.");
-      return;
-    }
-
-    const newDevice: Device = {
-      id: deviceId,
-      name: deviceName,
-      publicKey,
-      fingerprint: await FloppyDiskCrypto.computeFingerprint(publicKey),
-      addedAt: Date.now(),
-      trustStatus: "revoked"
-    };
-
-    this.plugin.settings.devices[newDevice.id] = newDevice;
-    await this.plugin.saveSettings();
-
-    new Notice("Device added. Trust will be established via handshake.");
   }
 
   public async regenerateKeys(): Promise<void> {
@@ -177,12 +148,6 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     await this.plugin.saveSettings();
   }
 
-  public getDeviceStatus(device: Device) {
-    if (device.trustStatus === "revoked") return "Revoked";
-    if (device.trustStatus === "trusted") return "Trusted";
-    return "Added";
-  }
-
   private async copyPairCode() {
     const offer = await this.webrtc.createPairingOffer();
     await navigator.clipboard.writeText(offer);
@@ -209,7 +174,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
         // trust after pairing
         if (parsed.deviceId && parsed.deviceName && parsed.publicKey) {
-          await this.webrtc.updateTrustedDevice(parsed.deviceId, parsed.deviceName, parsed.publicKey);
+          await this.plugin.deviceManager.trustDevice(parsed.deviceId, parsed.deviceName, parsed.publicKey);
         }
 
         await this.plugin.saveSettings();

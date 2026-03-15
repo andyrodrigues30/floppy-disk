@@ -1,5 +1,6 @@
 import { Notice, Plugin } from "obsidian";
 import { SnapshotManager } from "managers/SnapshotManager";
+import { DeviceManager } from "managers/DeviceManager";
 import { WebRTCManager } from "managers/WebRTCManager";
 import { DEFAULT_SETTINGS } from "settings/defaults";
 import { FloppyDiskSettingsTab } from "settings/FloppyDiskSettingsTab";
@@ -13,6 +14,7 @@ import { SyncProgress } from "types/sync";
 export default class FloppyDiskPlugin extends Plugin {
   public settings!: FloppyDiskSettings;
   public snapshotManager!: SnapshotManager;
+  public deviceManager: DeviceManager;
   public webrtcManager!: WebRTCManager;
   settingsTab?: FloppyDiskSettingsTab;
 
@@ -41,7 +43,7 @@ export default class FloppyDiskPlugin extends Plugin {
     this.snapshotManager = new SnapshotManager(this.app, this.settings);
     await this.snapshotManager.ensureSnapshotExists();
     await this.snapshotManager.setCurrentDevice(this.settings.deviceId)
-
+    this.deviceManager = new DeviceManager(this);
     this.webrtcManager = new WebRTCManager(this);
 
     // add settings tab

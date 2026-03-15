@@ -32,3 +32,9 @@ export interface SyncProgress {
   downloads: string[];
   conflicts: string[];
 }
+
+export interface DeviceActivity {
+  uploads: string[]
+  downloads: string[]
+  conflicts: string[]
+}

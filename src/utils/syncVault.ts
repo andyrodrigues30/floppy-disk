@@ -1,7 +1,7 @@
 import { App, Notice } from "obsidian";
-import { SnapshotManager } from "core/SnapshotManager";
-import { createSyncPlan, executeSync } from "core/syncEngine";
-import { WebRTCManager } from "core/WebRTCManager";
+import { SnapshotManager } from "managers/SnapshotManager";
+import { createSyncPlan, executeSync } from "utils/syncEngine";
+import { WebRTCManager } from "managers/WebRTCManager";
 import { Manifest } from "types/manifest";
 import { SYNC_VIEW_TYPE } from "ui/SyncView";
 

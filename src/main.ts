@@ -1,13 +1,13 @@
 import { Notice, Plugin } from "obsidian";
-import { SnapshotManager } from "core/SnapshotManager";
-import { WebRTCManager } from "core/WebRTCManager";
+import { SnapshotManager } from "managers/SnapshotManager";
+import { WebRTCManager } from "managers/WebRTCManager";
 import { DEFAULT_SETTINGS } from "settings/defaults";
 import { FloppyDiskSettingsTab } from "settings/FloppyDiskSettingsTab";
-import { registerCommands } from "./commands/registerCommands";
+import { registerCommands } from "commands/registerCommands";
 import { SYNC_VIEW_TYPE, SyncView } from "ui/SyncView";
 import { toggleSyncPanel } from "utils/syncVault";
 import { createThisDevice } from "utils/device";
-import { Device } from "types/device";
+import { Device, RemoteDevice } from "types/device";
 import { FloppyDiskSettings } from "types/settings";
 import { SyncProgress } from "types/sync";
 
@@ -64,6 +64,9 @@ export default class FloppyDiskPlugin extends Plugin {
     new Notice("Floppy disk plugin unloaded.");
   }
 
+  get remoteDevices(): Map<string, RemoteDevice> {
+    return this.webrtcManager.getRemoteDevices()
+  }
 
   public syncProgress: SyncProgress = {
     phase: "idle",

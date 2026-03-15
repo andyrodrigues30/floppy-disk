@@ -3,7 +3,7 @@ import FloppyDiskPlugin from "main";
 import { FloppyDiskCrypto } from "utils/cryptoHelper";
 import { DeviceRow } from "ui/DeviceRow";
 import { Device } from "types/device";
-import { WebRTCManager } from "core/WebRTCManager";
+import { WebRTCManager } from "managers/WebRTCManager";
 
 export class FloppyDiskSettingsTab extends PluginSettingTab {
   declare plugin: FloppyDiskPlugin;

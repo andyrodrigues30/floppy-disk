@@ -28,6 +28,7 @@ import FloppyDiskPlugin from "main";
 import { generateManifest } from "../utils/manifest";
 import { FloppyDiskCrypto } from "utils/cryptoHelper";
 import { isTextFile } from "utils/isTextFile";
+import { CONNECTION_CHANGED_EVENT } from "utils/events";
 
 const CHUNK_SIZE = 64 * 1024;
 
@@ -46,7 +47,7 @@ export class WebRTCManager {
     public connect(deviceId: string, channel: RTCDataChannel, connection: RTCPeerConnection) {
 
         this.channels[deviceId] = channel
-        
+
         const device = this.plugin.deviceManager.getDeviceById(deviceId)
 
         if (device) {
@@ -56,6 +57,10 @@ export class WebRTCManager {
                 channel
             })
         }
+
+        connection.onconnectionstatechange = () => {
+            this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
+        };
 
         channel.onopen = async () => {
             await this.startHandshake(deviceId)
@@ -67,8 +72,14 @@ export class WebRTCManager {
 
         channel.onclose = () => {
             delete this.channels[deviceId]
-            this.remoteDevices.delete(deviceId)
+            this.remoteDevices.delete(deviceId);
+            this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
         }
+    }
+
+    public isConnected(deviceId: string): boolean {
+        const remote = this.remoteDevices.get(deviceId);
+        return remote?.connection?.connectionState === "connected";
     }
 
     // send message to a connected device
@@ -247,6 +258,8 @@ export class WebRTCManager {
                     msg.deviceName ?? msg.deviceId,
                     msg.publicKey
                 );
+
+                this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
 
                 await this.plugin.deviceManager.updateLastSeen(msg.deviceId);
             } else {

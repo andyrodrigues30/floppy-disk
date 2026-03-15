@@ -1,14 +1,10 @@
-import {
-  App,
-  ItemView,
-  WorkspaceLeaf,
-  Setting,
-  Notice
-} from "obsidian"
+import { App, ItemView, WorkspaceLeaf, Setting, Notice, Events } from "obsidian";
 
-import FloppyDiskPlugin from "main"
-import { FileConflict, SyncProgress } from "types/sync"
-import { Device } from "types/device"
+import FloppyDiskPlugin from "main";
+import { FileConflict, SyncProgress } from "types/sync";
+import { Device } from "types/device";
+
+import { CONNECTION_CHANGED_EVENT } from "utils/events";
 
 export const SYNC_VIEW_TYPE = "floppy-disk-sync-view"
 
@@ -28,6 +24,13 @@ export class SyncView extends ItemView {
   getIcon(): string { return "refresh-cw" }
 
   async onOpen(): Promise<void> {
+    this.registerEvent(
+      (this.app.workspace as unknown as Events).on(
+        CONNECTION_CHANGED_EVENT,
+        () => this.render()
+      )
+    );
+
     this.render()
   }
 
@@ -55,12 +58,9 @@ export class SyncView extends ItemView {
 
     devices.forEach((device: Device) => {
 
-      const remote = remoteDevices.get(device.id)
+      const isConnected = this.plugin.webrtcManager.isConnected(device.id);
 
-      const connectionStatus =
-        remote?.connection?.connectionState === "connected"
-          ? "Online"
-          : "Offline"
+      const connectionStatus = isConnected ? "Online" : "Offline";
 
       if (!this.selectedDeviceId) {
         this.selectedDeviceId = device.id

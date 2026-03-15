@@ -44,7 +44,6 @@ export default class FloppyDiskPlugin extends Plugin {
       ...DEFAULT_SETTINGS,
       ...loaded,
       thisDevice: loaded?.thisDevice ?? (await createThisDevice()),
-      deviceName: loaded?.deviceName ?? DEFAULT_SETTINGS.deviceName,
     };
 
     // register commands
@@ -57,14 +56,14 @@ export default class FloppyDiskPlugin extends Plugin {
     // create managers AFTER deviceId exists
     this.snapshotManager = new SnapshotManager(this.app, this.settings);
     await this.snapshotManager.ensureSnapshotExists();
-    await this.snapshotManager.setCurrentDevice(this.settings.deviceId)
+    await this.snapshotManager.setCurrentDevice(this.settings.thisDevice.id)
     this.webrtcManager = new WebRTCManager(this);
     this.pairingManager = new PairingManager(this);
     this.syncManager = new SyncManager(this.app, this);
     this.deviceManager = new DeviceManager(this);
 
     // add settings tab
-    this.settingsTab = new FloppyDiskSettingsTab(this.app, this, this.webrtcManager, this.settings.deviceId);
+    this.settingsTab = new FloppyDiskSettingsTab(this.app, this, this.webrtcManager, this.settings.thisDevice.id);
     this.addSettingTab(this.settingsTab);
 
     // register views
@@ -101,8 +100,8 @@ export default class FloppyDiskPlugin extends Plugin {
   }
 
   private async ensureDeviceId(): Promise<void> {
-    if (!this.settings.deviceId) {
-      this.settings.deviceId = crypto.randomUUID();
+    if (!this.settings.thisDevice.id) {
+      this.settings.thisDevice.id = crypto.randomUUID();
       await this.saveSettings();
     }
   }

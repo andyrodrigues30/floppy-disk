@@ -5,7 +5,7 @@ export interface DeviceKeys {
 
 // Local device
 export interface ThisDevice extends DeviceKeys {
-  readonly id: string;
+  id: string;
   publicKey: string;
   fingerprint: string;
   name?: string;

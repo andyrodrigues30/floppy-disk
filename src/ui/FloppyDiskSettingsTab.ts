@@ -40,9 +40,9 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
       .addText((text) =>
         text
           .setPlaceholder("Optional")
-          .setValue(this.plugin.settings.deviceName ?? "")
+          .setValue(this.plugin.settings.thisDevice.name ?? "")
           .onChange(async (value: string) => {
-            this.plugin.settings.deviceName = value.trim();
+            this.plugin.settings.thisDevice.name = value.trim();
             await this.plugin.saveSettings();
           })
       );
@@ -155,7 +155,9 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
   }
 
   private async copyPairCode() {
-    const offer = await this.plugin.pairingManager.createOffer();
+    const offer = await this.plugin.webrtcManager.createOffer(
+      this.plugin.settings.thisDevice.id
+    );
     await navigator.clipboard.writeText(offer);
     new Notice("Code copied, add it to the other device.");
   }
@@ -166,7 +168,10 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
       // recieve offer
       if (parsed?.type === "PAIR_OFFER") {
-        const answer = await this.plugin.pairingManager.acceptOffer(parsed);
+        const answer = await this.plugin.webrtcManager.acceptOffer(
+          this.plugin.settings.thisDevice.id,
+          JSON.stringify(parsed)
+        );
 
         await navigator.clipboard.writeText(answer);
         new Notice("Pairing");
@@ -184,11 +189,11 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
         }
 
         await this.plugin.saveSettings();
-        
+
         if (this.pairCodeInput) {
           this.pairCodeInput.value = "";
         }
-        
+
         // refresh UI
         this.plugin.refreshSettingsUI();
 

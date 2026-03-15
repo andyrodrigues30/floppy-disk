@@ -34,6 +34,77 @@ export class WebRTCManager {
     }
 
     // connect
+    private createPeer(deviceId: string): RTCPeerConnection {
+        const peer = new RTCPeerConnection({
+            iceServers: [
+                { urls: "stun:stun.l.google.com:19302" }
+            ],
+        });
+
+        const channel = peer.createDataChannel("floppy-disk");
+
+        this.attachConnection(deviceId, peer, channel);
+
+        return peer;
+    }
+
+    public async createOffer(deviceId: string): Promise<string> {
+        const peer = this.createPeer(deviceId);
+
+        const offer = await peer.createOffer();
+        await peer.setLocalDescription(offer);
+
+        await this.waitForIceGathering(peer);
+
+        return JSON.stringify(peer.localDescription);
+    }
+
+    public async acceptOffer(
+        deviceId: string,
+        offerString: string
+    ): Promise<string> {
+
+        const peer = this.createPeer(deviceId);
+
+        const offer = JSON.parse(offerString);
+
+        await peer.setRemoteDescription(offer);
+
+        const answer = await peer.createAnswer();
+        await peer.setLocalDescription(answer);
+
+        await this.waitForIceGathering(peer);
+
+        return JSON.stringify(peer.localDescription);
+    }
+
+    public async finalizeConnection(
+        deviceId: string,
+        answerString: string
+    ) {
+        const entry = this.connections.get(deviceId);
+        if (!entry) throw new Error("Peer not found");
+
+        const answer = JSON.parse(answerString);
+
+        await entry.peer.setRemoteDescription(answer);
+    }
+
+    private waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
+        return new Promise((resolve) => {
+            if (peer.iceGatheringState === "complete") {
+                resolve();
+                return;
+            }
+
+            peer.onicegatheringstatechange = () => {
+                if (peer.iceGatheringState === "complete") {
+                    resolve();
+                }
+            };
+        });
+    }
+
     public isConnected(deviceId: string): boolean {
         return this.connections.get(deviceId)?.peer.connectionState === "connected";
     }

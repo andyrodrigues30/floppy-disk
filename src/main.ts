@@ -9,10 +9,12 @@ import { DEFAULT_SETTINGS } from "settings";
 import { registerSyncCommands } from "commands/registerSyncCommands";
 import { registerRegenerateKeysCommands } from "commands/registerRegenerateKeysCommands";
 import { SnapshotManager } from "managers/SnapshotManager";
+import { SyncManager } from "managers/SyncManager";
 import { DeviceManager } from "managers/DeviceManager";
 import { WebRTCManager } from "managers/WebRTCManager";
 
 import { FloppyDiskSettingsTab } from "ui/FloppyDiskSettingsTab";
+import { CONFLICT_DIFF_VIEW_TYPE, ConflictDiffView } from "ui/ConflictDiffView";
 import { SYNC_VIEW_TYPE, SyncView } from "ui/SyncView";
 
 import { createThisDevice } from "utils/device";
@@ -21,6 +23,7 @@ import { createThisDevice } from "utils/device";
 export default class FloppyDiskPlugin extends Plugin {
   public settings!: FloppyDiskSettings;
   public snapshotManager!: SnapshotManager;
+  public syncManager!: SyncManager;
   public deviceManager: DeviceManager;
   public webrtcManager!: WebRTCManager;
   settingsTab?: FloppyDiskSettingsTab;
@@ -51,6 +54,7 @@ export default class FloppyDiskPlugin extends Plugin {
     this.snapshotManager = new SnapshotManager(this.app, this.settings);
     await this.snapshotManager.ensureSnapshotExists();
     await this.snapshotManager.setCurrentDevice(this.settings.deviceId)
+    this.syncManager = new SyncManager(this.app, this);
     this.deviceManager = new DeviceManager(this);
     this.webrtcManager = new WebRTCManager(this);
 
@@ -58,7 +62,12 @@ export default class FloppyDiskPlugin extends Plugin {
     this.settingsTab = new FloppyDiskSettingsTab(this.app, this, this.webrtcManager, this.settings.deviceId);
     this.addSettingTab(this.settingsTab);
 
-    // sync view
+    // register views
+    this.registerView(
+      CONFLICT_DIFF_VIEW_TYPE,
+      (leaf) => new ConflictDiffView(leaf, this)
+    );
+
     this.registerView(
       SYNC_VIEW_TYPE,
       (leaf) => new SyncView(leaf, this)

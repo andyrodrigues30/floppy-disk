@@ -1,6 +1,31 @@
 import { DeviceKeys } from "types/device";
 
 export class FloppyDiskCrypto {
+
+  public static async initializeDeviceKeys(settings: any): Promise<void> {
+    const keyPair = await this.generateSigningKeyPair();
+
+    const privateKeyJwk = await this.exportSigningPrivateKey(keyPair.privateKey);
+    const publicKeyJwk = await this.exportSigningPublicKey(keyPair.publicKey);
+
+    const exportedPublicKey = btoa(JSON.stringify(publicKeyJwk));
+
+    const fingerprint = await this.computeFingerprint(exportedPublicKey);
+
+    const id = settings.thisDevice?.id ?? crypto.randomUUID()
+
+    settings.thisDevice = {
+      id: id,
+      name: settings.thisDevice?.name ?? id,
+      publicKey: exportedPublicKey,
+      fingerprint,
+      signingKeyPair: {
+        publicKeyJwk,
+        privateKeyJwk,
+      },
+    };
+  }
+
   // signing key pair (ECDSA) - for handshakes and identity
   public static async generateSigningKeyPair(): Promise<CryptoKeyPair> {
     return crypto.subtle.generateKey(

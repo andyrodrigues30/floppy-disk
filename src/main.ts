@@ -8,9 +8,11 @@ import { DEFAULT_SETTINGS } from "settings";
 
 import { registerSyncCommands } from "commands/registerSyncCommands";
 import { registerRegenerateKeysCommands } from "commands/registerRegenerateKeysCommands";
+
 import { SnapshotManager } from "managers/SnapshotManager";
 import { SyncManager } from "managers/SyncManager";
 import { DeviceManager } from "managers/DeviceManager";
+import { PairingManager } from "managers/PairingManager";
 import { WebRTCManager } from "managers/WebRTCManager";
 
 import { FloppyDiskSettingsTab } from "ui/FloppyDiskSettingsTab";
@@ -18,7 +20,7 @@ import { CONFLICT_DIFF_VIEW_TYPE, ConflictDiffView } from "ui/ConflictDiffView";
 import { SYNC_VIEW_TYPE, SyncView } from "ui/SyncView";
 
 import { createThisDevice } from "utils/device";
-import { PairingManager } from "managers/PairingManager";
+import { FloppyDiskCrypto } from "utils/cryptoHelper";
 
 
 export default class FloppyDiskPlugin extends Plugin {
@@ -45,6 +47,11 @@ export default class FloppyDiskPlugin extends Plugin {
       ...loaded,
       thisDevice: loaded?.thisDevice ?? (await createThisDevice()),
     };
+
+    if (!this.settings.thisDevice.signingKeyPair) {
+      await FloppyDiskCrypto.initializeDeviceKeys(this.settings);
+      await this.saveSettings();
+    }
 
     // register commands
     registerSyncCommands(this);

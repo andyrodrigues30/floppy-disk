@@ -1,9 +1,11 @@
-import { App } from "obsidian"
-import FloppyDiskPlugin from "main"
+import { App } from "obsidian";
 
-import { createSyncPlan, executeSync } from "utils/sync"
-import { Manifest } from "types/manifest"
-import { SyncPlan } from "types/sync"
+import { Manifest } from "types/manifest";
+import { SyncPlan } from "types/sync";
+
+import FloppyDiskPlugin from "main";
+
+import { createSyncPlan, executeSync } from "utils/sync";
 
 export class SyncManager {
 

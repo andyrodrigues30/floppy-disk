@@ -1,6 +1,8 @@
 import { Platform } from "obsidian"
+
 import { ThisDevice } from "types/device";
 import { DeviceKeys } from "types/device";
+
 import { FloppyDiskCrypto } from "utils/cryptoHelper";
 
 // create the local device with keys

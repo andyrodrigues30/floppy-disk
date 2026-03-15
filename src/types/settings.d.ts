@@ -1,6 +1,5 @@
-import { Device, ThisDevice } from "types/device"
+import { Device, ThisDevice } from "types/device";
 
-// plugin settings
 export interface FloppyDiskSettings {
   devices: Record<string, Device>;
   vaultId: string;

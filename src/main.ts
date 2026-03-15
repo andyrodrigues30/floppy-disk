@@ -1,15 +1,22 @@
 import { Notice, Plugin } from "obsidian";
-import { SnapshotManager } from "managers/SnapshotManager";
-import { DeviceManager } from "managers/DeviceManager";
-import { WebRTCManager } from "managers/WebRTCManager";
-import { DEFAULT_SETTINGS } from "settings";
-import { FloppyDiskSettingsTab } from "ui/FloppyDiskSettingsTab";
-import { registerCommands } from "commands/registerCommands";
-import { SYNC_VIEW_TYPE, SyncView } from "ui/SyncView";
-import { createThisDevice } from "utils/device";
+
 import { Device, RemoteDevice } from "types/device";
 import { FloppyDiskSettings } from "types/settings";
 import { SyncProgress } from "types/sync";
+
+import { DEFAULT_SETTINGS } from "settings";
+
+import { registerSyncCommands } from "commands/registerSyncCommands";
+import { registerRegenerateKeysCommands } from "commands/registerRegenerateKeysCommands";
+import { SnapshotManager } from "managers/SnapshotManager";
+import { DeviceManager } from "managers/DeviceManager";
+import { WebRTCManager } from "managers/WebRTCManager";
+
+import { FloppyDiskSettingsTab } from "ui/FloppyDiskSettingsTab";
+import { SYNC_VIEW_TYPE, SyncView } from "ui/SyncView";
+
+import { createThisDevice } from "utils/device";
+
 
 export default class FloppyDiskPlugin extends Plugin {
   public settings!: FloppyDiskSettings;
@@ -33,8 +40,9 @@ export default class FloppyDiskPlugin extends Plugin {
       deviceName: loaded?.deviceName ?? DEFAULT_SETTINGS.deviceName,
     };
 
-    // commands
-    registerCommands(this);
+    // register commands
+    registerSyncCommands(this);
+    registerRegenerateKeysCommands(this);
 
     await this.ensureDeviceId();
     this.settings.vaultId = this.app.vault.getName();

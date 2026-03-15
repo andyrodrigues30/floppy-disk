@@ -1,9 +1,8 @@
-import { Notice, TFile } from "obsidian"
-import FloppyDiskPlugin from "main"
-import { generateManifest } from "../utils/manifest"
-import { FloppyDiskCrypto } from "utils/cryptoHelper"
-import { Manifest } from "types/manifest"
-import { Device, RemoteDevice } from "types/device"
+import { Notice, TFile } from "obsidian";
+
+import { Device, RemoteDevice } from "types/device";
+import { Manifest } from "types/manifest";
+import { PairingOfferMessage, PairingAnswerMessage } from "types/pairing";
 import {
     BaseMessage,
     RequestManifestMessage,
@@ -12,7 +11,7 @@ import {
     HandshakeMessage,
     HandshakeAckMessage,
     FileCompleteMessage
-} from "types/messages"
+} from "types/messages";
 import {
     isConflictNotificationMessage,
     isFileChunkMessage,
@@ -22,9 +21,13 @@ import {
     isHandshakeMessage,
     isManifestResponseMessage,
     isRequestManifestMessage,
-} from "utils/messageGuards"
-import { PairingOfferMessage, PairingAnswerMessage } from "types/pairing"
-import { isTextFile } from "utils/isTextFile"
+} from "utils/messageGuards";
+
+import FloppyDiskPlugin from "main";
+
+import { generateManifest } from "../utils/manifest";
+import { FloppyDiskCrypto } from "utils/cryptoHelper";
+import { isTextFile } from "utils/isTextFile";
 
 const CHUNK_SIZE = 64 * 1024;
 

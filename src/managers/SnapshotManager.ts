@@ -1,8 +1,9 @@
-import { App, TFile } from "obsidian"
-import { FloppyDiskSettings } from "types/settings"
-import { FileSnapshot, Snapshot } from "types/snapshot"
-import { Manifest } from "types/manifest"
-import { SyncProgress } from "types/sync"
+import { App, TFile } from "obsidian";
+
+import { FloppyDiskSettings } from "types/settings";
+import { FileSnapshot, Snapshot } from "types/snapshot";
+import { Manifest } from "types/manifest";
+import { SyncProgress } from "types/sync";
 
 export class SnapshotManager {
   private app: App

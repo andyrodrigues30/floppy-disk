@@ -1,4 +1,4 @@
-import { Manifest } from "types/manifest"
+import { Manifest } from "types/manifest";
 
 export interface BaseMessage {
   type: string;

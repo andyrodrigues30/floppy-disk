@@ -89,5 +89,7 @@ export class DeviceManager {
         }
 
         await this.plugin.saveSettings();
+
+        this.plugin.refreshSettingsUI();
     }
 }

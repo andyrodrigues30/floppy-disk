@@ -8,12 +8,11 @@ import { WebRTCManager } from "managers/WebRTCManager";
 export class FloppyDiskSettingsTab extends PluginSettingTab {
   declare plugin: FloppyDiskPlugin;
   private webrtc: WebRTCManager;
-  private deviceId: string;
+  private pairCodeInput?: HTMLTextAreaElement;
 
   constructor(app: App, plugin: FloppyDiskPlugin, webrtc: WebRTCManager, deviceId: string) {
     super(app, plugin);
     this.webrtc = webrtc;
-    this.deviceId = deviceId;
   }
 
   display(): void {
@@ -70,14 +69,15 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
           .onClick(async () => {
             await this.regenerateKeys();
             new Notice("Keys regenerated.");
-            this.display();
+            this.plugin.refreshSettingsUI();
           })
       );
   }
 
   private renderPairDevice(containerEl: HTMLElement): void {
     new Setting(containerEl)
-      .setName("Pair new device").setHeading()
+      .setName("Pair new device")
+      .setHeading();
 
     new Setting(containerEl)
       .setName("Copy code")
@@ -89,24 +89,30 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
       );
 
     let pairCode = "";
+
     new Setting(containerEl)
       .setName("Pair code")
       .setDesc("Code generated from other device")
       .addTextArea((text) => {
         text
+          .setPlaceholder("Paste pairing code here")
           .onChange((value: string) => {
             pairCode = value.trim();
           });
 
         text.inputEl.classList.add("settings-pair-code");
+
+        // store reference so it can be cleared later
+        this.pairCodeInput = text.inputEl;
       })
       .addButton((btn) =>
         btn
           .setCta()
           .setButtonText("Pair devices")
-          .onClick(async (): Promise<void> => await this.submitPairCode(pairCode))
+          .onClick(async (): Promise<void> => {
+            await this.submitPairCode(pairCode);
+          })
       );
-
   }
 
   private renderDevices(containerEl: HTMLElement): void {
@@ -164,7 +170,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
         await navigator.clipboard.writeText(answer);
         new Notice("Pairing");
-        
+
         return;
       }
 
@@ -178,9 +184,13 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
         }
 
         await this.plugin.saveSettings();
-
+        
+        if (this.pairCodeInput) {
+          this.pairCodeInput.value = "";
+        }
+        
         // refresh UI
-        this.plugin.settingsTab?.display();
+        this.plugin.refreshSettingsUI();
 
         new Notice("Pairing complete");
 

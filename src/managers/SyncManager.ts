@@ -71,6 +71,9 @@ export class SyncManager {
     } catch (err) {
       console.error(err);
       new Notice("Sync failed.");
+    } finally {
+      this.plugin.syncProgress.phase = "idle";
+      this.plugin.snapshotManager.finishDeviceSync(remoteDeviceId);
     }
   }
 

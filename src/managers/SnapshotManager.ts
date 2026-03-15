@@ -91,12 +91,16 @@ export class SnapshotManager {
     if (!this.snapshot) {
       this.snapshot = this.createEmptySnapshot()
     }
-    
+
     this.snapshot.currentDeviceId = id
     await this.saveSnapshot()
   }
 
   // sync state
+  public isDeviceSyncing(id: string): boolean {
+    return this.activeSyncs.has(id);
+  }
+
   public startDeviceSync(id: string) {
     this.activeSyncs.add(id);
   }
@@ -105,8 +109,8 @@ export class SnapshotManager {
     this.activeSyncs.delete(id);
   }
 
-  public isDeviceSyncing(id: string): boolean {
-    return this.activeSyncs.has(id);
+  public finishDeviceSync(id: string) {
+    this.activeSyncs.delete(id);
   }
 
   // progress tracking

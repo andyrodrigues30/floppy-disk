@@ -21,7 +21,6 @@ export function createSyncPlan(
 
     const remoteFiles = remoteManifest.files
     const localFiles = localManifest.files
-
     const baseFiles = snapshot.files || {};
 
     // combine all unique file paths
@@ -36,12 +35,10 @@ export function createSyncPlan(
         const remoteHash = remoteFiles[path]
         const baseHash = baseFiles[path]?.lastSyncedHash
 
-        if (localHash === remoteHash) {
-            // same on both sides THEN SKIP
-            continue
-        }
+        // unchanged - same on both sides THEN SKIP
+        if (localHash === remoteHash) continue;
         
-        // file never synced before
+        // never synced before
         if (baseHash === undefined) {
             // new file on device/s THEN UPLOAD/DOWNLOAD
             if (localHash && !remoteHash) {
@@ -162,7 +159,7 @@ export async function executeSync(
         }
     }
 
-    new Notice("Sync execution completed.")
+    new Notice("Sync completed.")
 }
 
 function toArrayBuffer(buf: Uint8Array): ArrayBuffer {

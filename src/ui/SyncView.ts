@@ -46,7 +46,7 @@ export class SyncView extends ItemView {
     const devicesContainer = contentEl.createDiv()
     const remoteDevices = this.plugin.remoteDevices
 
-    const devices: Device[] = Object.values(this.plugin.settings.devices).filter((d: Device) => d.trustStatus === "trusted");
+    const devices: Device[] = this.plugin.deviceManager.getTrustedDevices()
 
     if (!devices) {
       new Setting(contentEl).setDesc("No devices.")

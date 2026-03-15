@@ -1,4 +1,4 @@
-import { TFile } from "obsidian"
+import { Notice, TFile } from "obsidian"
 import FloppyDiskPlugin from "main"
 import { generateManifest } from "../utils/manifest"
 import { FloppyDiskCrypto } from "utils/cryptoHelper"
@@ -43,8 +43,8 @@ export class WebRTCManager {
     public connect(deviceId: string, channel: RTCDataChannel, connection: RTCPeerConnection) {
 
         this.channels[deviceId] = channel
-
-        const device = this.plugin.settings.devices[deviceId]
+        
+        const device = this.plugin.deviceManager.getDeviceById(deviceId)
 
         if (device) {
             this.remoteDevices.set(deviceId, {
@@ -204,8 +204,6 @@ export class WebRTCManager {
     }
 
     private async handleHandshake(msg: HandshakeMessage): Promise<void> {
-        console.warn("received handshake from", msg.deviceId);
-
         console.warn("HANDSHAKE RECEIVED:", msg.deviceId);
 
         let accepted = false;
@@ -213,7 +211,7 @@ export class WebRTCManager {
         try {
             // validate incoming public key format
             if (!msg.publicKey) {
-                throw new Error("missing public key in handshake");
+                new Notice("Unsuccessful: Publickey Missing.");
             }
 
             // convert base64 jwk string back to object
@@ -241,13 +239,13 @@ export class WebRTCManager {
             );
 
             if (accepted) {
-                console.warn("handshake verified. device trusted:", msg.deviceId);
-
-                await this.updateTrustedDevice(
+                await this.plugin.deviceManager.trustDevice(
                     msg.deviceId,
                     msg.deviceName ?? msg.deviceId,
                     msg.publicKey
                 );
+
+                await this.plugin.deviceManager.updateLastSeen(msg.deviceId);
             } else {
                 console.warn("handshake signature invalid:", msg.deviceId);
             }
@@ -392,7 +390,7 @@ export class WebRTCManager {
         this.pairingSessions.set(offerMsg.sessionId, connection);
 
         // Trust the device that sent the offer
-        await this.updateTrustedDevice(
+        await this.plugin.deviceManager.trustDevice(
             offerMsg.deviceId,
             offerMsg.deviceName ?? offerMsg.deviceId,
             offerMsg.publicKey
@@ -434,7 +432,7 @@ export class WebRTCManager {
         await connection.setRemoteDescription(answer);
 
         // Trust the answering device
-        await this.updateTrustedDevice(
+        await this.plugin.deviceManager.trustDevice(
             answerMsg.deviceId,
             answerMsg.deviceName ?? answerMsg.deviceId,
             answerMsg.publicKey
@@ -457,45 +455,6 @@ export class WebRTCManager {
 
     public getRemoteDevices(): Map<string, RemoteDevice> {
         return this.remoteDevices
-    }
-
-    public async updateTrustedDevice(
-        deviceId: string,
-        deviceName: string,
-        publicKey: string
-    ): Promise<void> {
-        console.warn("Updating trusted device:", deviceId);
-
-        // const snapshot = await this.plugin.snapshotManager.loadSnapshot();
-        const now = Date.now();
-
-        // ensure devices array exists
-        if (!this.plugin.settings.devices) {
-            this.plugin.settings.devices = {};
-        }
-
-        const devices = this.plugin.settings.devices;
-        const fingerprint = await FloppyDiskCrypto.computeFingerprint(publicKey);
-
-        const existing = devices[deviceId];
-
-        if (existing) {
-            existing.trustStatus = "trusted";
-            existing.publicKey = publicKey;
-            existing.lastSeen = now;
-        } else {
-            devices[deviceId] = {
-                id: deviceId,
-                name: deviceName ?? deviceId,
-                publicKey,
-                fingerprint,
-                trustStatus: "trusted",
-                addedAt: now,
-                lastSeen: now
-            };
-        }
-
-        await this.plugin.saveSettings();
     }
 
     public async sendFileInChunks(deviceId: string, path: string) {

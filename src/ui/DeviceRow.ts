@@ -1,4 +1,4 @@
-import { Setting, Notice } from "obsidian";
+import { Setting } from "obsidian";
 import FloppyDiskPlugin from "../main";
 import { Device } from "types/device";
 
@@ -14,7 +14,8 @@ export class DeviceRow {
   }
 
   render(): void {
-    const device = this.plugin.settings.devices[this.deviceId];
+    const device = this.plugin.deviceManager.getDeviceById(this.deviceId);;
+
     if (!device) return;
 
     const setting = new Setting(this.containerEl)
@@ -33,7 +34,7 @@ export class DeviceRow {
           .setWarning()
           .setButtonText("Revoke")
           .onClick(async () => {
-            await this.revokeDevice(device.id);
+            this.plugin.deviceManager.removeDevice(device.id);
           })
       );
     }
@@ -44,35 +45,8 @@ export class DeviceRow {
         .setIcon("trash")
         .setTooltip("Delete device")
         .onClick(async (): Promise<void> => {
-          this.removeDevice(device.id)
+          this.plugin.deviceManager.removeDevice(device.id);
         })
     );
-  }
-
-  // revoke a device
-  private async revokeDevice(deviceId: string): Promise<void> {
-    const device = this.plugin.settings.devices[deviceId];
-    if (!device) return;
-
-    device.trustStatus = "revoked";
-
-    await this.plugin.saveSettings();
-
-    new Notice("Trust revoked.");
-
-    this.plugin.refreshSettingsUI();
-  }
-
-  // remove a device entirely
-  private async removeDevice(deviceId: string): Promise<void> {
-    if (!this.plugin.settings.devices[deviceId]) return;
-
-    delete this.plugin.settings.devices[deviceId];
-
-    await this.plugin.saveSettings();
-
-    new Notice("Device deleted.");
-
-    this.plugin.refreshSettingsUI();
   }
 }

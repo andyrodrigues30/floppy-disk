@@ -89,10 +89,7 @@ export class SyncManager {
     console.log(`Sync paused for ${id}`);
   }
 
-  public async resumeDeviceSync(id: string): Promise<void> {
-    if (!this.pausedDevices.has(id)) {
-      return;
-    }
+  public async startDeviceSync(id: string): Promise<void> {
 
     this.pausedDevices.delete(id);
 

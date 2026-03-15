@@ -23,7 +23,7 @@ export class SyncManager {
       const snapshot = await this.plugin.snapshotManager.loadSnapshot();
 
       // handshake
-      await this.plugin.webrtcManager.performHandshake(remoteDeviceId);
+      await this.plugin.webrtcManager.startHandshake(remoteDeviceId);
 
       // exchange manifests
       const remoteManifest: Manifest =

@@ -18,14 +18,20 @@ import { CONFLICT_DIFF_VIEW_TYPE, ConflictDiffView } from "ui/ConflictDiffView";
 import { SYNC_VIEW_TYPE, SyncView } from "ui/SyncView";
 
 import { createThisDevice } from "utils/device";
+import { SignalingManager } from "managers/SignalManager";
+import { PairingManager } from "managers/PairingManager";
 
 
 export default class FloppyDiskPlugin extends Plugin {
   public settings!: FloppyDiskSettings;
+
   public snapshotManager!: SnapshotManager;
+  public pairingManager!: PairingManager;
+  public signalingManager!: SignalingManager;
   public syncManager!: SyncManager;
   public deviceManager: DeviceManager;
   public webrtcManager!: WebRTCManager;
+
   settingsTab?: FloppyDiskSettingsTab;
 
 
@@ -54,9 +60,11 @@ export default class FloppyDiskPlugin extends Plugin {
     this.snapshotManager = new SnapshotManager(this.app, this.settings);
     await this.snapshotManager.ensureSnapshotExists();
     await this.snapshotManager.setCurrentDevice(this.settings.deviceId)
+    this.webrtcManager = new WebRTCManager(this);
+    this.pairingManager = new PairingManager(this);
+    this.signalingManager = new SignalingManager(this);
     this.syncManager = new SyncManager(this.app, this);
     this.deviceManager = new DeviceManager(this);
-    this.webrtcManager = new WebRTCManager(this);
 
     // add settings tab
     this.settingsTab = new FloppyDiskSettingsTab(this.app, this, this.webrtcManager, this.settings.deviceId);
@@ -79,10 +87,6 @@ export default class FloppyDiskPlugin extends Plugin {
 
   onunload() {
     new Notice("Floppy disk plugin unloaded.");
-  }
-
-  get remoteDevices(): Map<string, RemoteDevice> {
-    return this.webrtcManager.getRemoteDevices()
   }
 
   public syncProgress: SyncProgress = {

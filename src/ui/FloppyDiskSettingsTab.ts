@@ -155,7 +155,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
   }
 
   private async copyPairCode() {
-    const offer = await this.webrtc.createPairingOffer();
+    const offer = await this.plugin.pairingManager.createOffer();
     await navigator.clipboard.writeText(offer);
     new Notice("Code copied, add it to the other device.");
   }
@@ -166,7 +166,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
       // recieve offer
       if (parsed?.type === "PAIR_OFFER") {
-        const answer = await this.webrtc.acceptPairingOffer(parsed);
+        const answer = await this.plugin.pairingManager.acceptOffer(parsed);
 
         await navigator.clipboard.writeText(answer);
         new Notice("Pairing");
@@ -176,7 +176,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
       // complete pairing
       if (parsed?.type === "PAIR_ANSWER") {
-        await this.webrtc.completePairing(parsed);
+        await this.plugin.pairingManager.completePairing(parsed);
 
         // trust after pairing
         if (parsed.deviceId && parsed.deviceName && parsed.publicKey) {

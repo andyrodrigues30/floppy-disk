@@ -1,26 +1,18 @@
 import FloppyDiskPlugin from "../main";
-import { syncVault, toggleSyncPanel } from "utils/syncVault";
+import { SyncView } from "ui/SyncView";
 import { Notice } from "obsidian";
 
 export function registerCommands(plugin: FloppyDiskPlugin): void {
     plugin.addCommand({
-        id: "sync-vault",
-        name: "Sync vault",
-        callback: async () => {
-            await syncVault(plugin.app, plugin.snapshotManager, plugin.webrtcManager)
-        }
-    });
-
-    plugin.addCommand({
         id: "open-sync-panel",
         name: "Open sync panel",
-        callback: async () => toggleSyncPanel(plugin.app),
+        callback: async () => await SyncView.toggle(plugin.app)
     });
 
     plugin.addCommand({
         id: "close-sync-panel",
         name: "Close sync panel",
-        callback: async () => toggleSyncPanel(plugin.app),
+        callback: async () => await SyncView.toggle(plugin.app)
     });
 
     plugin.addCommand({
@@ -32,7 +24,7 @@ export function registerCommands(plugin: FloppyDiskPlugin): void {
             } else {
                 new Notice("Cannot regenerate keys.")
             }
-        },
+        }
     });
 }
 

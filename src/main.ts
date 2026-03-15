@@ -1,6 +1,6 @@
 import { Notice, Plugin } from "obsidian";
 
-import { Device, RemoteDevice } from "types/device";
+import { Device } from "types/device";
 import { FloppyDiskSettings } from "types/settings";
 import { SyncProgress } from "types/sync";
 
@@ -18,7 +18,6 @@ import { CONFLICT_DIFF_VIEW_TYPE, ConflictDiffView } from "ui/ConflictDiffView";
 import { SYNC_VIEW_TYPE, SyncView } from "ui/SyncView";
 
 import { createThisDevice } from "utils/device";
-import { SignalingManager } from "managers/SignalManager";
 import { PairingManager } from "managers/PairingManager";
 
 
@@ -27,7 +26,6 @@ export default class FloppyDiskPlugin extends Plugin {
 
   public snapshotManager!: SnapshotManager;
   public pairingManager!: PairingManager;
-  public signalingManager!: SignalingManager;
   public syncManager!: SyncManager;
   public deviceManager: DeviceManager;
   public webrtcManager!: WebRTCManager;
@@ -62,7 +60,6 @@ export default class FloppyDiskPlugin extends Plugin {
     await this.snapshotManager.setCurrentDevice(this.settings.deviceId)
     this.webrtcManager = new WebRTCManager(this);
     this.pairingManager = new PairingManager(this);
-    this.signalingManager = new SignalingManager(this);
     this.syncManager = new SyncManager(this.app, this);
     this.deviceManager = new DeviceManager(this);
 

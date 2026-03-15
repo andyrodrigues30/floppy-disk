@@ -1,31 +1,16 @@
 import { Notice, TFile } from "obsidian";
 
-import { Device, RemoteDevice } from "types/device";
 import { Manifest } from "types/manifest";
-import { PairingOfferMessage, PairingAnswerMessage } from "types/pairing";
 import {
-    BaseMessage,
-    RequestManifestMessage,
     ManifestResponseMessage,
     FileChunkMessage,
     HandshakeMessage,
-    HandshakeAckMessage,
-    FileCompleteMessage,
     Message
 } from "types/messages";
 
 import FloppyDiskPlugin from "main";
 
-import {
-    isConflictNotificationMessage,
-    isFileChunkMessage,
-    isFileCompleteMessage,
-    isFileRequestMessage,
-    isHandshakeAckMessage,
-    isHandshakeMessage,
-    isManifestResponseMessage,
-    isRequestManifestMessage,
-} from "utils/messageGuards";
+import { isFileChunkMessage, isFileCompleteMessage } from "utils/messageGuards";
 import { generateManifest } from "../utils/manifest";
 import { FloppyDiskCrypto } from "utils/cryptoHelper";
 import { isTextFile } from "utils/isTextFile";

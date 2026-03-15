@@ -37,9 +37,3 @@ export interface RevokedDevice extends BaseDevice {
 }
 
 export type Device = TrustedDevice | RevokedDevice;
-
-export interface RemoteDevice {
-  device: Device;
-  connection: RTCPeerConnection;
-  channel: RTCDataChannel;
-}

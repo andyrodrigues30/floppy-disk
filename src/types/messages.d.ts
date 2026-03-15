@@ -53,24 +53,6 @@ export interface HandshakeAckMessage extends BaseMessage {
   accepted: boolean;
 }
 
-export interface OfferSignalMessage extends BaseMessage {
-  type: "OFFER";
-  deviceId: string;
-  payload: RTCSessionDescriptionInit;
-}
-
-export interface AnswerSignalMessage extends BaseMessage {
-  type: "ANSWER";
-  deviceId: string;
-  payload: RTCSessionDescriptionInit;
-}
-
-export interface IceSignalMessage extends BaseMessage {
-  type: "ICE";
-  deviceId: string;
-  candidate: RTCIceCandidateInit;
-}
-
 export type Message =
   | RequestManifestMessage
   | ManifestResponseMessage
@@ -79,7 +61,4 @@ export type Message =
   | FileCompleteMessage
   | ConflictNotificationMessage
   | HandshakeMessage
-  | HandshakeAckMessage
-  | OfferSignalMessage
-  | AnswerSignalMessage
-  | IceSignalMessage;
+  | HandshakeAckMessage;

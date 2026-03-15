@@ -1,1 +1,0 @@
-// TODO: #7 - conflict management

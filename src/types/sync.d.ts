@@ -31,6 +31,7 @@ export interface SyncProgress {
   uploads: string[];
   downloads: string[];
   conflicts: FileConflict[];
+  currentConflict?: FileConflict;
 }
 
 export interface DeviceActivity {

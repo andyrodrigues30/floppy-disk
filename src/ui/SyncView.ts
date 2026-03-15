@@ -43,12 +43,19 @@ export class SyncView extends ItemView {
   }
 
   private renderDevicesSection(contentEl: HTMLElement): void {
-
     new Setting(contentEl).setName("Devices").setHeading()
+      .setDesc("Refresh device connections")
+      .addButton(btn =>
+        btn
+          .setButtonText("Refresh")
+          .onClick(async () => {
+            new Notice("Refreshing connections...");
+            await this.plugin.webrtcManager.reconnectAllDevices();
+            this.render();
+          })
+      );
 
     const devicesContainer = contentEl.createDiv()
-    const remoteDevices = this.plugin.remoteDevices
-
     const devices: Device[] = this.plugin.deviceManager.getTrustedDevices()
 
     if (!devices) {

@@ -38,6 +38,8 @@ export class WebRTCManager {
     private pairingSessions: Map<string, RTCPeerConnection> = new Map();
     private channels: Record<string, RTCDataChannel> = {};
     private fileBuffers: Record<string, Uint8Array[]> = {};
+    private peerConnections: Map<string, RTCPeerConnection> = new Map();
+    private dataChannels: Map<string, RTCDataChannel> = new Map();
 
     constructor(plugin: FloppyDiskPlugin) {
         this.plugin = plugin;
@@ -66,20 +68,86 @@ export class WebRTCManager {
             await this.startHandshake(deviceId)
         }
 
-        channel.onmessage = async (event) => {
-            await this.handleMessage(deviceId, event.data)
-        }
-
         channel.onclose = () => {
             delete this.channels[deviceId]
             this.remoteDevices.delete(deviceId);
             this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
         }
+
+        channel.onmessage = async (event) => {
+            await this.handleMessage(deviceId, event.data)
+        }
+
+        channel.onerror = (err) => {
+            console.error("Data channel error:", err);
+        };
+
+        connection.onicecandidate = (event) => {
+            if (event.candidate) {
+                console.log("ICE candidate generated for", deviceId);
+                // normally sent via signalling
+            }
+        };
+
+        connection.onconnectionstatechange = () => {
+            console.log("Connection state:", connection.connectionState);
+
+            if (
+                connection.connectionState === "failed" ||
+                connection.connectionState === "disconnected" ||
+                connection.connectionState === "closed"
+            ) {
+                this.dataChannels.delete(deviceId);
+                this.peerConnections.delete(deviceId);
+            }
+            this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
+        };
     }
 
     public isConnected(deviceId: string): boolean {
         const remote = this.remoteDevices.get(deviceId);
         return remote?.connection?.connectionState === "connected";
+    }
+
+    public async connectToDevice(deviceId: string): Promise<void> {
+        try {
+            if (this.isConnected(deviceId)) {
+                console.log("Already connected to", deviceId);
+                return;
+            }
+
+            console.log("Connecting to device:", deviceId);
+
+
+            const connection = new RTCPeerConnection({
+                iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+            });
+
+            this.peerConnections.set(deviceId, connection);
+
+            // create data channel
+            const channel = connection.createDataChannel("floppy-disk");
+
+            this.connect(deviceId, channel, connection)
+
+            connection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    console.log("ICE candidate generated for", deviceId);
+                    // normally sent via signalling
+                }
+            };
+
+            // create offer
+            const offer = await connection.createOffer();
+
+            await connection.setLocalDescription(offer);
+
+            new Notice("Connection offer created. Send this to the other device.");
+
+        } catch (err) {
+            console.error("Failed to connect:", err);
+            new Notice("Failed to start connection.");
+        }
     }
 
     // send message to a connected device
@@ -453,6 +521,19 @@ export class WebRTCManager {
             answerMsg.deviceName ?? answerMsg.deviceId,
             answerMsg.publicKey
         );
+
+        await this.connectToDevice(answerMsg.deviceId);
+    }
+
+    public async reconnectAllDevices(): Promise<void> {
+        const devices = this.plugin.deviceManager.getTrustedDevices();
+
+        for (const device of devices) {
+            if (!this.isConnected(device.id)) {
+                console.warn("Attempting connection to", device.id);
+                await this.connectToDevice(device.id);
+            }
+        }
     }
 
     // verify a signature given public key and data

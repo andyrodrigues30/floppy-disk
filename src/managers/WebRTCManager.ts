@@ -169,10 +169,7 @@ export class WebRTCManager {
         entry.channel.send(JSON.stringify(msg));
     }
 
-    private async handleMessage(
-        id: string,
-        data: string | ArrayBuffer
-    ) {
+    private async handleMessage(id: string, data: string | ArrayBuffer) {
         if (typeof data !== "string") return;
 
         let msg: Message;

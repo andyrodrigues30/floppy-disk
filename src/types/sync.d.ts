@@ -1,6 +1,6 @@
 export interface SyncAction {
   path: string;
-  action: "upload" | "download" | "conflict" | "skip";
+  action: "upload" | "download" | "delete" | "skip";
   localHash?: string;
   remoteHash?: string;
   baseHash?: string;
@@ -10,7 +10,7 @@ export interface SyncPlan {
   uploads: SyncAction[];
   downloads: SyncAction[];
   deletes: SyncAction[];
-  conflicts: SyncAction[];
+  conflicts: FileConflict[];
 }
 
 export type SyncPhase =
@@ -30,11 +30,18 @@ export interface SyncProgress {
   currentFile?: string;
   uploads: string[];
   downloads: string[];
-  conflicts: string[];
+  conflicts: FileConflict[];
 }
 
 export interface DeviceActivity {
   uploads: string[];
   downloads: string[];
   conflicts: string[];
+}
+
+export interface FileConflict {
+  path: string;
+  localHash: string;
+  remoteHash: string;
+  baseHash?: string;
 }

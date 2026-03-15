@@ -1,6 +1,6 @@
 import { App, Notice, TFile } from "obsidian";
 
-import { SyncAction, SyncPlan } from "types/sync";
+import { FileConflict, SyncAction, SyncPlan } from "types/sync";
 import { Snapshot } from "types/snapshot";
 import { Manifest } from "types/manifest";
 
@@ -20,7 +20,7 @@ export function createSyncPlan(
     const uploads: SyncAction[] = []
     const downloads: SyncAction[] = []
     const deletes: SyncAction[] = []
-    const conflicts: SyncAction[] = []
+    const conflicts: FileConflict[] = []
 
     const remoteFiles = remoteManifest.files
     const localFiles = localManifest.files
@@ -40,36 +40,36 @@ export function createSyncPlan(
 
         // unchanged - same on both sides THEN SKIP
         if (localHash === remoteHash) continue;
-        
+
         // never synced before
         if (baseHash === undefined) {
             // new file on device/s THEN UPLOAD/DOWNLOAD
             if (localHash && !remoteHash) {
-                uploads.push({ path, action: "upload", localHash, baseHash })
+                uploads.push({ path, action: "upload", localHash })
             } else if (!localHash && remoteHash) {
-                downloads.push({ path, action: "download", remoteHash, baseHash })
+                downloads.push({ path, action: "download", remoteHash })
             } else {
                 // both exist but no base THEN CONFLICT
-                conflicts.push({ path, action: "conflict", localHash, remoteHash })
+                conflicts.push({ path, localHash: localHash!, remoteHash: remoteHash! });
             }
 
-            continue
+            continue;
         }
-        
+
         // three way merge logic
-        if (localHash === baseHash && remoteHash !== baseHash) {
-            // local unchanged, remote changed THEN DOWNLOAD
-            downloads.push({ path, action: "download", localHash, remoteHash, baseHash })
-        } else if (remoteHash === baseHash && localHash !== baseHash) {
-            // remote unchanged, local changed THEN UPLOAD
-            uploads.push({ path, action: "upload", localHash, remoteHash, baseHash })
-        } else {
-            // both changed since last sync THEN CONFLICT
-            conflicts.push({ path, action: "conflict", localHash, remoteHash, baseHash })
+        const localChanged = localHash !== baseHash;
+        const remoteChanged = remoteHash !== baseHash;
+
+        if (!localChanged && remoteChanged) {
+            downloads.push({ path, action: "download", remoteHash, baseHash });
+        } else if (!remoteChanged && localChanged) {
+            uploads.push({ path, action: "upload", localHash, baseHash });
+        } else if (localChanged && remoteChanged) {
+            conflicts.push({ path, localHash: localHash!, remoteHash: remoteHash!, baseHash });
         }
     }
 
-    return { uploads, downloads, deletes, conflicts }
+    return { uploads, downloads, deletes, conflicts };
 }
 
 export async function executeSync(

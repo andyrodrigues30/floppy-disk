@@ -7,7 +7,7 @@ import {
 } from "obsidian"
 
 import FloppyDiskPlugin from "main"
-import { SyncProgress } from "types/sync"
+import { FileConflict, SyncProgress } from "types/sync"
 import { Device } from "types/device"
 
 export const SYNC_VIEW_TYPE = "floppy-disk-sync-view"
@@ -74,14 +74,12 @@ export class SyncView extends ItemView {
       const setting = new Setting(devicesContainer)
         .setName(device.name ?? device.id)
         .setDesc(
-          `Connection: ${connectionStatus} | Last Seen: ${
-            device.lastSeen
-              ? new Date(device.lastSeen).toLocaleString()
-              : "Never"
-          } | Last Synced: ${
-            lastSynced
-              ? new Date(lastSynced).toLocaleString()
-              : "Never"
+          `Connection: ${connectionStatus} | Last Seen: ${device.lastSeen
+            ? new Date(device.lastSeen).toLocaleString()
+            : "Never"
+          } | Last Synced: ${lastSynced
+            ? new Date(lastSynced).toLocaleString()
+            : "Never"
           }`
         )
 
@@ -118,9 +116,9 @@ export class SyncView extends ItemView {
   ): void {
 
     if (!selectedDeviceId) return
-    
+
     new Setting(contentEl).setName("Activity").setHeading()
-    
+
     const progress: SyncProgress | undefined = this.plugin.snapshotManager.getDeviceProgress(selectedDeviceId)
     if (!progress) {
       new Setting(contentEl).setDesc("No activity.")
@@ -129,7 +127,7 @@ export class SyncView extends ItemView {
 
     this.renderFileList(contentEl, "Uploads", progress.uploads)
     this.renderFileList(contentEl, "Downloads", progress.downloads)
-    this.renderFileList(contentEl, "Conflicts", progress.conflicts)
+    this.renderConflictList(contentEl, progress.conflicts)
   }
 
   private renderFileList(
@@ -147,22 +145,51 @@ export class SyncView extends ItemView {
     })
   }
 
+  private renderConflictList(
+    container: HTMLElement,
+    conflicts: FileConflict[]
+  ): void {
+
+    if (conflicts.length === 0) return;
+
+    new Setting(container).setName("Conflicts").setHeading();
+
+    conflicts.forEach((conflict) => {
+
+      const setting = new Setting(container)
+        .setDesc(conflict.path);
+
+      // show hashes in tooltip
+      setting.descEl.title =
+        `Local: ${conflict.localHash}\nRemote: ${conflict.remoteHash}`;
+
+      setting.addButton(btn =>
+        btn
+          .setButtonText("Resolve")
+          .onClick(() => {
+            new Notice("Conflict resolution UI not implemented yet.");
+            // TODO: open diff modal here
+          })
+      );
+    });
+  }
+
   static async toggle(app: App) {
     const leaves = app.workspace.getLeavesOfType(SYNC_VIEW_TYPE);
 
     if (leaves.length > 0) {
-        leaves.forEach(leaf => leaf.detach());
+      leaves.forEach(leaf => leaf.detach());
     } else {
-        const leaf = app.workspace.getRightLeaf(false);
-        if (leaf) {
-            await leaf.setViewState({
-                type: SYNC_VIEW_TYPE,
-                active: true,
-            });
-            await app.workspace.revealLeaf(leaf);
-        } else {
-            new Notice("Cannot open sync panel.")
-        }
+      const leaf = app.workspace.getRightLeaf(false);
+      if (leaf) {
+        await leaf.setViewState({
+          type: SYNC_VIEW_TYPE,
+          active: true,
+        });
+        await app.workspace.revealLeaf(leaf);
+      } else {
+        new Notice("Cannot open sync panel.")
+      }
     }
-}
+  }
 }

@@ -180,44 +180,33 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     try {
       const parsed = JSON.parse(pairCode.trim());
 
-      // recieve offer
-      if (parsed?.type === "PAIR_OFFER") {
+      // offer
+      if (parsed?.type === "offer" && parsed?.sdp) {
         const answer = await this.plugin.webrtcManager.acceptOffer(
           this.plugin.settings.thisDevice.id,
           JSON.stringify(parsed)
         );
 
         await navigator.clipboard.writeText(answer);
-        new Notice("Pairing");
 
+        new Notice("Answer generated. Send it back to the other device.");
         return;
       }
 
-      // complete pairing
-      if (parsed?.type === "PAIR_ANSWER") {
-        await this.plugin.pairingManager.completePairing(parsed);
+      // answer
+      if (parsed?.type === "answer" && parsed?.sdp) {
+        await this.plugin.webrtcManager.finalizeConnection(
+          this.plugin.settings.thisDevice.id,
+          JSON.stringify(parsed)
+        );
 
-        // trust after pairing
-        if (parsed.deviceId && parsed.deviceName && parsed.publicKey) {
-          await this.plugin.deviceManager.trustDevice(parsed.deviceId, parsed.deviceName, parsed.publicKey, parsed.fingerprint);
-        }
-
-        await this.plugin.saveSettings();
-
-        if (this.pairCodeInput) {
-          this.pairCodeInput.value = "";
-        }
-
-        // refresh UI
-        this.plugin.refreshSettingsUI();
-
-        new Notice("Pairing complete");
-
+        new Notice("Pairing complete!");
         return;
       }
 
       new Notice("Invalid pairing code");
-    } catch {
+
+    } catch (e) {
       new Notice("Invalid pairing code");
     }
   }

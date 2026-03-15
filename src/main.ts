@@ -48,6 +48,7 @@ export default class FloppyDiskPlugin extends Plugin {
     // create managers AFTER deviceId exists
     this.snapshotManager = new SnapshotManager(this.app, this.settings);
     await this.snapshotManager.ensureSnapshotExists();
+    this.snapshotManager.setCurrentDevice(this.settings.deviceId)
 
     this.webrtcManager = new WebRTCManager(this);
 

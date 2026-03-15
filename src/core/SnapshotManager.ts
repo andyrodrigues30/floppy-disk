@@ -85,12 +85,13 @@ export class SnapshotManager {
     }
 
     // device context
-    public setCurrentDevice(deviceId: string): void {
+    public async setCurrentDevice(deviceId: string) {
         if (!this.snapshot) {
             this.snapshot = this.createEmptySnapshot()
         }
 
         this.snapshot.currentDeviceId = deviceId
+        await this.saveSnapshot()
     }
 
     // sync updates

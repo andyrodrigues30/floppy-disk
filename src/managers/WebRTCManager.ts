@@ -54,8 +54,6 @@ export class WebRTCManager {
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
 
-        await this.waitForIceGathering(peer);
-
         return JSON.stringify(peer.localDescription);
     }
 

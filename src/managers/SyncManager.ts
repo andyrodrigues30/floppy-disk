@@ -74,9 +74,9 @@ export class SyncManager {
     }
   }
 
-  public pauseDeviceSync(deviceId: string): void {
+  public pauseDeviceSync(id: string): void {
 
-    this.pausedDevices.add(deviceId);
+    this.pausedDevices.add(id);
 
     // stop sync phase
     const progress = this.plugin.syncProgress;
@@ -84,17 +84,17 @@ export class SyncManager {
     progress.currentFile = undefined;
 
     // update SnapshotManager UI state
-    this.plugin.snapshotManager.pauseDeviceSync(deviceId);
+    this.plugin.snapshotManager.pauseDeviceSync(id);
 
-    console.log(`Sync paused for ${deviceId}`);
+    console.log(`Sync paused for ${id}`);
   }
 
-  public async resumeDeviceSync(deviceId: string): Promise<void> {
-    if (!this.pausedDevices.has(deviceId)) {
+  public async resumeDeviceSync(id: string): Promise<void> {
+    if (!this.pausedDevices.has(id)) {
       return;
     }
 
-    this.pausedDevices.delete(deviceId);
+    this.pausedDevices.delete(id);
 
     const progress = this.plugin.syncProgress;
 
@@ -107,9 +107,9 @@ export class SyncManager {
     progress.phase = "comparing";
 
     // update UI state
-    this.plugin.snapshotManager.startDeviceSync(deviceId);
+    this.plugin.snapshotManager.startDeviceSync(id);
 
-    await this.syncDevice(deviceId);
+    await this.syncDevice(id);
   }
 
   public async resolveConflict(

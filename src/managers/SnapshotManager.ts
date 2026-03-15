@@ -87,44 +87,44 @@ export class SnapshotManager {
     }
   }
 
-  public async setCurrentDevice(deviceId: string) {
+  public async setCurrentDevice(id: string) {
     if (!this.snapshot) {
       this.snapshot = this.createEmptySnapshot()
     }
-
-    this.snapshot.currentDeviceId = deviceId
+id
+    this.snapshot.currentDeviceId = id
     await this.saveSnapshot()
   }
 
   // sync state
-  public startDeviceSync(deviceId: string) {
-    this.activeSyncs.add(deviceId);
+  public startDeviceSync(id: string) {
+    this.activeSyncs.add(id);
   }
 
-  public pauseDeviceSync(deviceId: string) {
-    this.activeSyncs.delete(deviceId);
+  public pauseDeviceSync(id: string) {
+    this.activeSyncs.delete(id);
   }
 
-  public isDeviceSyncing(deviceId: string): boolean {
-    return this.activeSyncs.has(deviceId);
+  public isDeviceSyncing(id: string): boolean {
+    return this.activeSyncs.has(id);
   }
 
   // progress tracking
-  public setDeviceProgress(deviceId: string, progress: SyncProgress) {
-    this.deviceProgress.set(deviceId, progress)
+  public setDeviceProgress(id: string, progress: SyncProgress) {
+    this.deviceProgress.set(id, progress)
   }
 
-  public getDeviceProgress(deviceId: string): SyncProgress | undefined {
-    return this.deviceProgress.get(deviceId)
+  public getDeviceProgress(id: string): SyncProgress | undefined {
+    return this.deviceProgress.get(id)
   }
 
   // last synced
-  public getLastSynced(deviceId: string): number | undefined {
-    return this.lastSynced.get(deviceId)
+  public getLastSynced(id: string): number | undefined {
+    return this.lastSynced.get(id)
   }
 
-  private updateLastSynced(deviceId: string) {
-    this.lastSynced.set(deviceId, Date.now())
+  private updateLastSynced(id: string) {
+    this.lastSynced.set(id, Date.now())
   }
 
   // sync updates

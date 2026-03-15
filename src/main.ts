@@ -107,8 +107,8 @@ export default class FloppyDiskPlugin extends Plugin {
   }
 
   // find a device by ID
-  public findDevice(deviceId: string): Device | undefined {
-    return this.settings.devices[deviceId];
+  public findDevice(id: string): Device | undefined {
+    return this.settings.devices[id];
   }
 
   public refreshSettingsUI(): void {

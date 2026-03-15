@@ -65,6 +65,7 @@ export class WebRTCManager {
         const peer = this.createPeer(id);
 
         const offer = JSON.parse(offerString);
+        console.log("Offer type:", offer?.type);
 
         await peer.setRemoteDescription(offer);
 

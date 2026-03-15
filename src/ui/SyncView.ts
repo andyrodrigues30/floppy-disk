@@ -1,5 +1,12 @@
-import { ItemView, WorkspaceLeaf } from "obsidian"
+import {
+  ItemView,
+  WorkspaceLeaf,
+  Setting
+} from "obsidian"
+
 import FloppyDiskPlugin from "main"
+import { SyncProgress } from "types/sync"
+import { Device } from "types/device"
 
 export const SYNC_VIEW_TYPE = "floppy-disk-sync-view"
 
@@ -12,17 +19,11 @@ export class SyncView extends ItemView {
     this.plugin = plugin
   }
 
-  getViewType(): string {
-    return SYNC_VIEW_TYPE
-  }
+  getViewType(): string { return SYNC_VIEW_TYPE }
 
-  getDisplayText(): string {
-    return "Floppy disk sync"
-  }
+  getDisplayText(): string { return "Floppy disk sync" }
 
-  getIcon(): string {
-    return "refresh-cw"
-  }
+  getIcon(): string { return "refresh-cw" }
 
   async onOpen(): Promise<void> {
     this.render()
@@ -32,16 +33,26 @@ export class SyncView extends ItemView {
     const { contentEl } = this
     contentEl.empty()
 
-    const devices = Object.values(this.plugin.settings.devices)
-      .filter(d => d.trustStatus === "trusted")
+    this.renderDevicesSection(contentEl)
+    this.renderActivitySection(contentEl, this.selectedDeviceId)
+  }
 
-    const remoteDevices = this.plugin.remoteDevices
+  private renderDevicesSection(contentEl: HTMLElement): void {
 
-    contentEl.createEl("h2", { text: "Devices" })
+    new Setting(contentEl).setName("Devices").setHeading()
 
     const devicesContainer = contentEl.createDiv()
+    const remoteDevices = this.plugin.remoteDevices
 
-    devices.forEach(device => {
+    const devices: Device[] = Object.values(this.plugin.settings.devices).filter((d: Device) => d.trustStatus === "trusted");
+
+    if (!devices) {
+      new Setting(contentEl).setDesc("No devices.")
+      return
+    }
+
+    devices.forEach((device: Device) => {
+
       const remote = remoteDevices.get(device.id)
 
       const connectionStatus =
@@ -49,75 +60,68 @@ export class SyncView extends ItemView {
           ? "Online"
           : "Offline"
 
-      const row = devicesContainer.createDiv("device-row")
-
       if (!this.selectedDeviceId) {
         this.selectedDeviceId = device.id
       }
 
-      if (device.id === this.selectedDeviceId) {
-        row.addClass("device-selected")
-      }
-
-      row.createEl("div", { text: device.name ?? device.id })
-      row.createEl("div", { text: `Connection: ${connectionStatus}` })
-
-      row.createEl("div", {
-        text: `Last Seen: ${
-          device.lastSeen
-            ? new Date(device.lastSeen).toLocaleString()
-            : "Never"
-        }`
-      })
-
       const lastSynced = this.plugin.snapshotManager.getLastSynced(device.id)
-
-      row.createEl("div", {
-        text: `Last Synced: ${
-          lastSynced
-            ? new Date(lastSynced).toLocaleString()
-            : "Never"
-        }`
-      })
 
       const isSyncing =
         this.plugin.snapshotManager.isDeviceSyncing(device.id)
 
-      const button = row.createEl("button", {
-        text: isSyncing ? "Pause" : "Sync"
-      })
+      const setting = new Setting(devicesContainer)
+        .setName(device.name ?? device.id)
+        .setDesc(
+          `Connection: ${connectionStatus} | Last Seen: ${
+            device.lastSeen
+              ? new Date(device.lastSeen).toLocaleString()
+              : "Never"
+          } | Last Synced: ${
+            lastSynced
+              ? new Date(lastSynced).toLocaleString()
+              : "Never"
+          }`
+        )
 
-      button.onclick = (e) => {
-        e.stopPropagation()
-
-        if (isSyncing) {
-          this.plugin.snapshotManager.pauseDeviceSync(device.id)
-        } else {
-          this.plugin.snapshotManager.startDeviceSync(device.id)
-        }
-
-        this.render()
+      if (device.id === this.selectedDeviceId) {
+        setting.settingEl.addClass("device-selected")
       }
 
-      row.onclick = () => {
+      setting.addButton(button => {
+        button
+          .setButtonText(isSyncing ? "Pause" : "Sync")
+          .onClick(() => {
+
+            if (isSyncing) {
+              this.plugin.snapshotManager.pauseDeviceSync(device.id)
+            } else {
+              this.plugin.snapshotManager.startDeviceSync(device.id)
+            }
+
+            this.render()
+          })
+      })
+
+      setting.settingEl.onclick = () => {
         this.selectedDeviceId = device.id
         this.render()
       }
+
     })
+  }
 
-    // =============================
-    // Activity
-    // =============================
+  private renderActivitySection(
+    contentEl: HTMLElement,
+    selectedDeviceId: string | null
+  ): void {
 
-    if (!this.selectedDeviceId) return
-
-    const progress =
-      this.plugin.snapshotManager.getDeviceProgress(this.selectedDeviceId)
-
-    contentEl.createEl("h2", { text: "Activity" })
-
+    if (!selectedDeviceId) return
+    
+    new Setting(contentEl).setName("Activity").setHeading()
+    
+    const progress: SyncProgress | undefined = this.plugin.snapshotManager.getDeviceProgress(selectedDeviceId)
     if (!progress) {
-      contentEl.createEl("div", { text: "No activity." })
+      new Setting(contentEl).setDesc("No activity.")
       return
     }
 
@@ -131,14 +135,13 @@ export class SyncView extends ItemView {
     title: string,
     files: string[]
   ): void {
-    if (!files?.length) return
 
-    container.createEl("h3", { text: title })
+    if (files.length === 0) return
 
-    const list = container.createEl("ul")
+    new Setting(container).setName(title).setHeading()
 
-    for (const file of files) {
-      list.createEl("li", { text: file })
-    }
+    files.forEach((file: string) => {
+      new Setting(container).setDesc(file)
+    })
   }
 }

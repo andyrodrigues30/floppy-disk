@@ -72,7 +72,7 @@ export class WebRTCManager {
         const answer = await peer.createAnswer();
         await peer.setLocalDescription(answer);
 
-        await this.waitForIceGathering(peer);
+        // await this.waitForIceGathering(peer);
 
         return JSON.stringify(peer.localDescription);
     }

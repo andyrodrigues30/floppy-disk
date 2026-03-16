@@ -72,8 +72,6 @@ export class WebRTCManager {
         const answer = await peer.createAnswer();
         await peer.setLocalDescription(answer);
 
-        // await this.waitForIceGathering(peer);
-
         return JSON.stringify(peer.localDescription);
     }
 
@@ -265,6 +263,8 @@ export class WebRTCManager {
                     msg.publicKey,
                     msg.fingerprint
                 );
+
+                await this.plugin.saveSettings();
 
                 this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
             }

@@ -34,22 +34,27 @@ export class WebRTCManager {
     }
 
     // connect
-    private createPeer(id: string): RTCPeerConnection {
+    private createPeer(id: string, isInitiator: boolean): RTCPeerConnection {
         const peer = new RTCPeerConnection({
             iceServers: [
                 { urls: "stun:stun.l.google.com:19302" }
             ],
         });
 
-        const channel = peer.createDataChannel("floppy-disk");
-
-        this.attachConnection(id, peer, channel);
+        if (isInitiator) {
+            const channel = peer.createDataChannel("floppy-disk");
+            this.attachConnection(id, peer, channel);
+        } else {
+            peer.ondatachannel = (event) => {
+                this.attachConnection(id, peer, event.channel);
+            };
+        }
 
         return peer;
     }
 
     public async createOffer(id: string): Promise<string> {
-        const peer = this.createPeer(id);
+        const peer = this.createPeer(id, true);
 
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
@@ -62,17 +67,17 @@ export class WebRTCManager {
         offerString: string
     ): Promise<string> {
 
-        const peer = this.createPeer(id);
+        const peer = this.createPeer(id, false);
 
         const offer = JSON.parse(offerString);
         console.log("Offer type:", offer?.type);
 
-        await peer.setRemoteDescription(offer);
+        await peer.setRemoteDescription(offer);// accept offer
 
-        const answer = await peer.createAnswer();
+        const answer = await peer.createAnswer();// generate answer
         await peer.setLocalDescription(answer);
 
-        return JSON.stringify(peer.localDescription);
+        return JSON.stringify(peer.localDescription);// send back
     }
 
     public async finalizeConnection(

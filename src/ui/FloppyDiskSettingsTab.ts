@@ -8,6 +8,7 @@ import { WebRTCManager } from "managers/WebRTCManager";
 export class FloppyDiskSettingsTab extends PluginSettingTab {
   declare plugin: FloppyDiskPlugin;
   private webrtc: WebRTCManager;
+  private pairingConnectionId?: string;
   private pairCodeInput?: HTMLTextAreaElement;
 
   constructor(app: App, plugin: FloppyDiskPlugin, webrtc: WebRTCManager, deviceId: string) {
@@ -169,9 +170,8 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
   }
 
   private async copyPairCode() {
-    const offer = await this.plugin.webrtcManager.createOffer(
-      this.plugin.settings.thisDevice.id
-    );
+    this.pairingConnectionId = crypto.randomUUID();
+    const offer = await this.plugin.webrtcManager.createOffer(this.pairingConnectionId);
     await navigator.clipboard.writeText(offer);
     new Notice("Code copied, add it to the other device.");
   }
@@ -182,8 +182,9 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
       // offer
       if (parsed?.type === "offer" && parsed?.sdp) {
+        const pairingId = crypto.randomUUID();
         const answer = await this.plugin.webrtcManager.acceptOffer(
-          this.plugin.settings.thisDevice.id,
+          pairingId,
           JSON.stringify(parsed)
         );
 
@@ -195,8 +196,14 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
 
       // answer
       if (parsed?.type === "answer" && parsed?.sdp) {
+
+        if (!this.pairingConnectionId) {
+          new Notice("No pairing session active.");
+          return;
+        }
+
         await this.plugin.webrtcManager.finalizeConnection(
-          this.plugin.settings.thisDevice.id,
+          this.pairingConnectionId,
           JSON.stringify(parsed)
         );
 

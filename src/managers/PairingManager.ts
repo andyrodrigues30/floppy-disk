@@ -19,10 +19,5 @@ export class PairingManager {
             answerMsg.publicKey,
             answerMsg.fingerprint
         );
-
-        // now trigger actual connection
-        await this.plugin.webrtcManager.connectToDevice(
-            answerMsg.deviceId
-        );
     }
 }

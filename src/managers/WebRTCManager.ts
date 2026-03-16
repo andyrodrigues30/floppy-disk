@@ -70,7 +70,6 @@ export class WebRTCManager {
         const peer = this.createPeer(id, false);
 
         const offer = JSON.parse(offerString);
-        console.log("Offer type:", offer?.type);
 
         await peer.setRemoteDescription(offer);// accept offer
 
@@ -270,6 +269,8 @@ export class WebRTCManager {
                 );
 
                 await this.plugin.saveSettings();
+
+                this.plugin.refreshSettingsUI();
 
                 this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
             }

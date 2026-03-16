@@ -19,5 +19,7 @@ export class PairingManager {
             answerMsg.publicKey,
             answerMsg.fingerprint
         );
+
+        await this.plugin.saveSettings();
     }
 }

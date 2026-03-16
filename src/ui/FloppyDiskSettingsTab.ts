@@ -207,6 +207,13 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
           JSON.stringify(parsed)
         );
 
+        await this.plugin.saveSettings();
+        this.plugin.refreshSettingsUI();
+
+        if (this.pairCodeInput) this.pairCodeInput.value = "";
+
+        this.pairingConnectionId = undefined;
+
         new Notice("Pairing complete!");
         return;
       }

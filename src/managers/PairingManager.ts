@@ -21,5 +21,6 @@ export class PairingManager {
         );
 
         await this.plugin.saveSettings();
+        this.plugin.refreshSettingsUI();
     }
 }

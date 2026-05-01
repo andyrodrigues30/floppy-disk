@@ -1,6 +1,9 @@
 import { Setting } from "obsidian";
+
+import { Device } from "../types/device";
+
 import FloppyDiskPlugin from "../main";
-import { Device } from "types/device";
+
 
 export class SettingsDeviceRow {
   private plugin: FloppyDiskPlugin;

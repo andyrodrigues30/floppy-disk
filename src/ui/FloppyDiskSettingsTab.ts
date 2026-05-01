@@ -1,9 +1,9 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
-import FloppyDiskPlugin from "main";
-import { FloppyDiskCrypto } from "utils/cryptoHelper";
-import { SettingsDeviceRow } from "ui/SettingsDeviceRow";
-import { Device } from "types/device";
-import { WebRTCManager } from "managers/WebRTCManager";
+import FloppyDiskPlugin from "../main";
+import { FloppyDiskCrypto } from "../utils/cryptoHelper";
+import { SettingsDeviceRow } from "../ui/SettingsDeviceRow";
+import { Device } from "../types/device";
+import { WebRTCManager } from "../managers/WebRTCManager";
 
 export class FloppyDiskSettingsTab extends PluginSettingTab {
   declare plugin: FloppyDiskPlugin;

@@ -1,10 +1,12 @@
 import { App, ItemView, WorkspaceLeaf, Setting, Notice, Events } from "obsidian";
 
-import FloppyDiskPlugin from "main";
-import { FileConflict, SyncProgress } from "types/sync";
-import { Device } from "types/device";
+import { FileConflict, SyncProgress } from "../types/sync";
+import { Device } from "../types/device";
 
-import { CONNECTION_CHANGED_EVENT } from "utils/events";
+import FloppyDiskPlugin from "../main";
+
+import { CONNECTION_CHANGED_EVENT } from "../utils/events";
+
 
 export const SYNC_VIEW_TYPE = "floppy-disk-sync-view"
 
@@ -97,14 +99,14 @@ export class SyncView extends ItemView {
       setting.addButton(button => {
         button
           .setButtonText(isSyncing ? "Pause" : "Sync")
-          .onClick(() => {
+          .onClick(async () => {
 
             if (isSyncing) {
               console.warn("Pausing...")
               this.plugin.syncManager.pauseDeviceSync(device.id)
             } else {
               console.warn("Resuming...")
-              this.plugin.syncManager.startDeviceSync(device.id)
+              await this.plugin.syncManager.startDeviceSync(device.id)
             }
 
             this.render()

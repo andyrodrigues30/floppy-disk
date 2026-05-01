@@ -1,4 +1,4 @@
-import { Device, ThisDevice } from "types/device";
+import { Device, ThisDevice } from "../types/device";
 
 export interface FloppyDiskSettings {
   devices: Record<string, Device>;

@@ -1,14 +1,14 @@
 import { App, Notice, TFile } from "obsidian";
 
-import { FileConflict, SyncAction, SyncPlan } from "types/sync";
-import { Snapshot } from "types/snapshot";
-import { Manifest } from "types/manifest";
+import { FileConflict, SyncAction, SyncPlan } from "../types/sync";
+import { Snapshot } from "../types/snapshot";
+import { Manifest } from "../types/manifest";
 
-import { WebRTCManager } from "managers/WebRTCManager";
-import { SnapshotManager } from "managers/SnapshotManager";
+import { WebRTCManager } from "../managers/WebRTCManager";
+import { SnapshotManager } from "../managers/SnapshotManager";
 
-import { FloppyDiskCrypto } from "utils/cryptoHelper";
-import { isTextFile } from "utils/isTextFile";
+import { FloppyDiskCrypto } from "../utils/cryptoHelper";
+import { isTextFile } from "../utils/isTextFile";
 
 
 export function createSyncPlan(

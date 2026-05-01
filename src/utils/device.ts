@@ -1,6 +1,6 @@
-import { ThisDevice } from "types/device";
+import { ThisDevice } from "../types/device";
 
-import { FloppyDiskCrypto } from "utils/cryptoHelper";
+import { FloppyDiskCrypto } from "../utils/cryptoHelper";
 
 export async function createThisDevice(): Promise<ThisDevice> {
 

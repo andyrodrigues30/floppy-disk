@@ -1,7 +1,7 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import FloppyDiskPlugin from "main";
 import { FloppyDiskCrypto } from "utils/cryptoHelper";
-import { DeviceRow } from "ui/DeviceRow";
+import { SettingsDeviceRow } from "ui/SettingsDeviceRow";
 import { Device } from "types/device";
 import { WebRTCManager } from "managers/WebRTCManager";
 
@@ -125,7 +125,7 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     }
 
     devices.forEach((device) => {
-      new DeviceRow(containerEl, this.plugin, device).render();
+      new SettingsDeviceRow(containerEl, this.plugin, device).render();
     });
   }
 
@@ -189,6 +189,11 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
         );
 
         await navigator.clipboard.writeText(answer);
+
+        await this.plugin.saveSettings();
+        this.plugin.refreshSettingsUI();
+
+        if (this.pairCodeInput) this.pairCodeInput.value = "";
 
         new Notice("Answer generated. Send it back to the other device.");
         return;

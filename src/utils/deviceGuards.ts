@@ -1,4 +1,4 @@
-import { Device, RevokedDevice, TrustedDevice } from "types/device";
+import { Device, RevokedDevice, TrustedDevice } from "../types/device";
 
 export function isTrustedDevice(device: Device): device is TrustedDevice {
     return device.trustStatus === "trusted";

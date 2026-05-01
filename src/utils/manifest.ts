@@ -1,8 +1,8 @@
 import { App } from "obsidian";
 
-import { Manifest } from "types/manifest";
+import { Manifest } from "../types/manifest";
 
-import { FloppyDiskCrypto } from "utils/cryptoHelper";
+import { FloppyDiskCrypto } from "../utils/cryptoHelper";
 
 export async function generateManifest(
   app: App,

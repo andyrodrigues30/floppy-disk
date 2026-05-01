@@ -1,4 +1,4 @@
-import { DeviceKeys } from "types/device";
+import { DeviceKeys } from "../types/device";
 
 export class FloppyDiskCrypto {
 

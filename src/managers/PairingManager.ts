@@ -1,6 +1,6 @@
-import FloppyDiskPlugin from "main";
+import { PairingAnswerMessage } from "../types/pairing";
 
-import { PairingAnswerMessage } from "types/pairing";
+import FloppyDiskPlugin from "../main";
 
 export class PairingManager {
     private plugin: FloppyDiskPlugin;

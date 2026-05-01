@@ -1,11 +1,11 @@
 import { App, Notice } from "obsidian";
 
-import { Manifest } from "types/manifest";
-import { SyncPlan } from "types/sync";
+import { Manifest } from "../types/manifest";
+import { SyncPlan } from "../types/sync";
 
-import FloppyDiskPlugin from "main";
+import FloppyDiskPlugin from "../main";
 
-import { createSyncPlan, executeSync } from "utils/sync";
+import { createSyncPlan, executeSync } from "../utils/sync";
 
 export class SyncManager {
   private app: App;
@@ -89,7 +89,7 @@ export class SyncManager {
     // update SnapshotManager UI state
     this.plugin.snapshotManager.pauseDeviceSync(id);
 
-    console.log(`Sync paused for ${id}`);
+    console.warn(`Sync paused for ${id}`);
   }
 
   public async startDeviceSync(id: string): Promise<void> {

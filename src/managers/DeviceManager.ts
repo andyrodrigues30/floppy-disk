@@ -1,10 +1,8 @@
 import { Notice } from "obsidian";
 
-import { Device } from "types/device";
+import { Device } from "../types/device";
 
-import FloppyDiskPlugin from "main";
-
-import { FloppyDiskCrypto } from "utils/cryptoHelper"
+import FloppyDiskPlugin from "../main";
 
 export class DeviceManager {
     private plugin: FloppyDiskPlugin

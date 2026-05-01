@@ -1,26 +1,26 @@
 import { Notice, Plugin } from "obsidian";
 
-import { Device } from "types/device";
-import { FloppyDiskSettings } from "types/settings";
-import { SyncProgress } from "types/sync";
+import { Device } from "./types/device";
+import { FloppyDiskSettings } from "./types/settings";
+import { SyncProgress } from "./types/sync";
 
-import { DEFAULT_SETTINGS } from "settings";
+import { DEFAULT_SETTINGS } from "./settings";
 
-import { registerSyncCommands } from "commands/registerSyncCommands";
-import { registerRegenerateKeysCommands } from "commands/registerRegenerateKeysCommands";
+import { registerSyncCommands } from "./commands/registerSyncCommands";
+import { registerRegenerateKeysCommands } from "./commands/registerRegenerateKeysCommands";
 
-import { SnapshotManager } from "managers/SnapshotManager";
-import { SyncManager } from "managers/SyncManager";
-import { DeviceManager } from "managers/DeviceManager";
-import { PairingManager } from "managers/PairingManager";
-import { WebRTCManager } from "managers/WebRTCManager";
+import { SnapshotManager } from "./managers/SnapshotManager";
+import { SyncManager } from "./managers/SyncManager";
+import { DeviceManager } from "./managers/DeviceManager";
+import { PairingManager } from "./managers/PairingManager";
+import { WebRTCManager } from "./managers/WebRTCManager";
 
-import { FloppyDiskSettingsTab } from "ui/FloppyDiskSettingsTab";
-import { CONFLICT_DIFF_VIEW_TYPE, ConflictDiffView } from "ui/ConflictDiffView";
-import { SYNC_VIEW_TYPE, SyncView } from "ui/SyncView";
+import { FloppyDiskSettingsTab } from "./ui/FloppyDiskSettingsTab";
+import { CONFLICT_DIFF_VIEW_TYPE, ConflictDiffView } from "./ui/ConflictDiffView";
+import { SYNC_VIEW_TYPE, SyncView } from "./ui/SyncView";
 
-import { createThisDevice } from "utils/device";
-import { FloppyDiskCrypto } from "utils/cryptoHelper";
+import { createThisDevice } from "./utils/device";
+import { FloppyDiskCrypto } from "./utils/cryptoHelper";
 
 
 export default class FloppyDiskPlugin extends Plugin {

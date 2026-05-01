@@ -1,8 +1,8 @@
 import { Modal, App, Setting } from "obsidian";
 
-import { FileConflict } from "types/sync";
+import { FileConflict } from "../types/sync";
 
-import FloppyDiskPlugin from "main";
+import FloppyDiskPlugin from "../main";
 
 export class ConflictModal extends Modal {
   constructor(
@@ -19,14 +19,14 @@ export class ConflictModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl("h2", { text: "Resolve Conflict" });
+    contentEl.createEl("h2", { text: "Resolve conflict" });
 
     contentEl.createEl("p", { text: this.conflict.path });
 
     new Setting(contentEl)
       .addButton(btn =>
         btn
-          .setButtonText("Keep Local")
+          .setButtonText("Keep local")
           .setCta()
           .onClick(async () => {
             await this.plugin.syncManager.resolveConflict(
@@ -40,7 +40,7 @@ export class ConflictModal extends Modal {
       )
       .addButton(btn =>
         btn
-          .setButtonText("Keep Remote")
+          .setButtonText("Keep remote")
           .setCta()
           .onClick(async () => {
             await this.plugin.syncManager.resolveConflict(

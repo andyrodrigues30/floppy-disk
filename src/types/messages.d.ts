@@ -1,4 +1,4 @@
-import { Manifest } from "types/manifest";
+import { Manifest } from "../types/manifest";
 
 export interface BaseMessage {
   type: string;
@@ -23,7 +23,7 @@ export interface FileChunkMessage extends BaseMessage {
   path: string;
   chunkIndex: number;
   totalChunks: number;
-  data: ArrayBuffer;
+  data: string;
 }
 
 export interface FileCompleteMessage extends BaseMessage {

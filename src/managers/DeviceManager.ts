@@ -66,27 +66,16 @@ export class DeviceManager {
         fingerprint: string
     ): Promise<void> {
 
-        const devices = this.plugin.settings.devices;
         const now = Date.now();
-
-        const existing = devices[id];
-
-        if (existing) {
-            existing.trustStatus = "trusted";
-            existing.publicKey = publicKey;
-            existing.name = name ?? id;
-            existing.lastSeen = now;
-        } else {
-            devices[id] = {
-                id,
-                name: name ?? id,
-                publicKey,
-                fingerprint,
-                trustStatus: "trusted",
-                addedAt: now,
-                lastSeen: now
-            };
-        }
+        this.plugin.settings.devices[id] = {
+            id,
+            name: name ?? id,
+            publicKey,
+            fingerprint,
+            trustStatus: "trusted",
+            addedAt: now,
+            lastSeen: now
+        };
 
         await this.plugin.saveSettings();
 

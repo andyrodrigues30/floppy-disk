@@ -20,6 +20,12 @@ export class SyncManager {
 
 	async syncDevice(remoteDeviceId: string): Promise<void> {
 		try {
+
+			if (!this.plugin.webrtcManager.isConnected(remoteDeviceId)) {
+				new Notice("Device not connected yet.");
+				return;
+			}
+
 			// load snapshot (base state)
 			const snapshot = await this.plugin.snapshotManager.loadSnapshot();
 

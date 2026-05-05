@@ -29,7 +29,6 @@ type ConnectionEntry = {
 export class WebRTCManager {
 	private plugin: FloppyDiskPlugin;
 	private connections: Map<string, ConnectionEntry> = new Map();
-	private connectionStates: Map<string, boolean> = new Map();
 	private pendingConnections = new Map<
 		string,
 		{
@@ -119,34 +118,46 @@ export class WebRTCManager {
 	}
 
 	public isConnected(id: string): boolean {
-		const peer = this.connections.get(id)?.peer;
+		const entry = this.connections.get(id);
+		if (!entry) return false;
+
+		const peer = entry.peer;
+		const channel = entry.channel;
 
 		return (
-			peer?.connectionState === "connected" ||
-			peer?.iceConnectionState === "connected" ||
-			peer?.iceConnectionState === "completed"
+			peer.connectionState === "connected" &&
+			channel.readyState === "open"
 		);
 	}
 
-	public async connectToDevice(id: string): Promise<void> {
-		if (this.isConnected(id)) return;
+	public async connectToDevice(id: string): Promise<string> {
+		if (this.isConnected(id)) return "";
 
 		const peer = new RTCPeerConnection({
 			iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 		});
 
 		const channel = peer.createDataChannel("floppy-disk");
+
 		this.attachConnection(id, peer, channel);
 
 		const offer = await peer.createOffer();
 		await peer.setLocalDescription(offer);
 
-		return new Promise((resolve, reject) => {
+		return new Promise<string>((resolve, reject) => {
 			this.pendingConnections.set(id, { resolve, reject });
 
+			channel.onopen = () => {
+				resolve(JSON.stringify(peer.localDescription));
+			};
+
 			setTimeout(() => {
-				this.pendingConnections.delete(id);
-				reject(new Error("Connection timeout"));
+				if (this.pendingConnections.has(id)) {
+					this.pendingConnections.get(id)?.reject(
+						new Error("Connection timeout")
+					);
+					this.pendingConnections.delete(id);
+				}
 			}, 15000);
 		});
 	}
@@ -158,16 +169,22 @@ export class WebRTCManager {
 	) {
 		this.connections.set(id, { peer, channel });
 
+		const updateUI = () => {
+			this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
+		};
+
 		peer.onconnectionstatechange = () => {
-			if (
-				peer.connectionState === "failed" ||
-				peer.connectionState === "disconnected" ||
-				peer.connectionState === "closed"
-			) {
+			const state = peer.connectionState;
+
+			if (state === "failed" || state === "disconnected" || state === "closed") {
 				this.connections.delete(id);
 			}
 
-			this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
+			updateUI();
+		};
+
+		peer.oniceconnectionstatechange = () => {
+			updateUI();
 		};
 
 		peer.onicecandidate = (event) => {
@@ -180,18 +197,16 @@ export class WebRTCManager {
 		};
 
 		channel.onopen = () => {
-			this.connectionStates.set(id, true);
-			this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
+			updateUI();
 			this.startHandshake(id);
 		};
 
-		channel.onmessage = (event) => this.handleMessage(id, event.data);
-
 		channel.onclose = () => {
-			this.connectionStates.set(id, false);
 			this.connections.delete(id);
-			this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
+			updateUI();
 		};
+
+		channel.onmessage = (event) => this.handleMessage(id, event.data);
 	}
 
 	// ice candidate

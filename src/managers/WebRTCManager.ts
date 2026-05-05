@@ -30,6 +30,13 @@ export class WebRTCManager {
 	private plugin: FloppyDiskPlugin;
 	private connections: Map<string, ConnectionEntry> = new Map();
 	private connectionStates: Map<string, boolean> = new Map();
+	private pendingConnections = new Map<
+		string,
+		{
+			resolve: () => void;
+			reject: (err: any) => void;
+		}
+	>();
 	private fileBuffers: Map<string, Uint8Array[]> = new Map();
 	private fileChunkTotals = new Map<string, number>();
 	private pendingManifestResolvers: Map<
@@ -85,9 +92,14 @@ export class WebRTCManager {
 		const entry = this.connections.get(id);
 		if (!entry) throw new Error("Peer not found");
 
-		const answer = JSON.parse(answerString); // accept offer
+		const answer = JSON.parse(answerString);
 
+		// apply remote answer first
 		await entry.peer.setRemoteDescription(answer);
+
+		// mark connection as established (your new logic)
+		this.pendingConnections.get(id)?.resolve();
+		this.pendingConnections.delete(id);
 	}
 
 	// TODO: Delete following function after testing
@@ -107,7 +119,13 @@ export class WebRTCManager {
 	}
 
 	public isConnected(id: string): boolean {
-		return this.connectionStates.get(id) ?? false;
+		const peer = this.connections.get(id)?.peer;
+
+		return (
+			peer?.connectionState === "connected" ||
+			peer?.iceConnectionState === "connected" ||
+			peer?.iceConnectionState === "completed"
+		);
 	}
 
 	public async connectToDevice(id: string): Promise<void> {
@@ -118,13 +136,19 @@ export class WebRTCManager {
 		});
 
 		const channel = peer.createDataChannel("floppy-disk");
-
 		this.attachConnection(id, peer, channel);
 
 		const offer = await peer.createOffer();
 		await peer.setLocalDescription(offer);
 
-		new Notice("Connection offer created. Send to remote device.");
+		return new Promise((resolve, reject) => {
+			this.pendingConnections.set(id, { resolve, reject });
+
+			setTimeout(() => {
+				this.pendingConnections.delete(id);
+				reject(new Error("Connection timeout"));
+			}, 15000);
+		});
 	}
 
 	private attachConnection(
@@ -446,9 +470,14 @@ export class WebRTCManager {
 		const devices = this.plugin.deviceManager.getTrustedDevices();
 
 		for (const device of devices) {
-			if (!this.isConnected(device.id)) {
-				console.warn("Attempting connection to", device.id);
+			if (this.isConnected(device.id)) continue;
+
+			console.warn("Attempting connection to", device.id);
+
+			try {
 				await this.connectToDevice(device.id);
+			} catch (e) {
+				console.warn("Failed to connect:", device.id, e);
 			}
 		}
 	}

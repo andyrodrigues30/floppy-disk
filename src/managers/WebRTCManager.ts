@@ -138,14 +138,8 @@ export class WebRTCManager {
 			iceState: peer.iceConnectionState,
 			channel: channel.readyState
 		});
-
-		return (
-			channel.readyState === "open" &&
-			(peer.connectionState === "connected" ||
-				peer.iceConnectionState === "connected" ||
-				peer.iceConnectionState === "completed" ||
-				channel.onopen !== null)
-		);
+		
+		return channel.readyState === "open";
 	}
 
 	public async connectToDevice(id: string): Promise<string> {
@@ -195,12 +189,6 @@ export class WebRTCManager {
 				this.connections.delete(id);
 			}
 
-			this.updateUI();
-		};
-
-		peer.oniceconnectionstatechange = () => {
-			const state = peer.connectionState;
-			console.log(`[attachConnection | oniceconnectionstatechange]: ${state}`)
 			this.updateUI();
 		};
 

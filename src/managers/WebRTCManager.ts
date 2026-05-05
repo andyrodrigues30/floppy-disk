@@ -71,6 +71,8 @@ export class WebRTCManager {
 		const offer = await peer.createOffer();
 		await peer.setLocalDescription(offer);
 
+		await this.waitForIceGathering(peer);
+
 		return JSON.stringify(peer.localDescription);
 	}
 
@@ -79,12 +81,14 @@ export class WebRTCManager {
 
 		const offer = JSON.parse(offerString);
 
-		await peer.setRemoteDescription(offer); // accept offer
+		await peer.setRemoteDescription(offer);
 
-		const answer = await peer.createAnswer(); // generate answer
+		const answer = await peer.createAnswer();
 		await peer.setLocalDescription(answer);
 
-		return JSON.stringify(peer.localDescription); // send back
+		await this.waitForIceGathering(peer);
+
+		return JSON.stringify(peer.localDescription);
 	}
 
 	public async finalizeConnection(id: string, answerString: string) {
@@ -163,7 +167,11 @@ export class WebRTCManager {
 		peer.onconnectionstatechange = () => {
 			const state = peer.connectionState;
 
-			if (state === "failed" || state === "disconnected" || state === "closed") {
+			if (
+				state === "failed" ||
+				state === "disconnected" ||
+				state === "closed"
+			) {
 				this.connections.delete(id);
 			}
 
@@ -174,16 +182,8 @@ export class WebRTCManager {
 			updateUI();
 		};
 
-		peer.onicecandidate = (event) => {
-			if (event.candidate) {
-				this.sendMessage(id, {
-					type: "ICE_CANDIDATE",
-					candidate: event.candidate.toJSON(),
-				});
-			}
-		};
-
 		channel.onopen = () => {
+			console.log("Data channel OPEN:", id);
 			updateUI();
 			this.startHandshake(id);
 		};
@@ -194,21 +194,6 @@ export class WebRTCManager {
 		};
 
 		channel.onmessage = (event) => this.handleMessage(id, event.data);
-	}
-
-	// ice candidate
-	private async handleIceCandidate(
-		id: string,
-		candidate: RTCIceCandidateInit,
-	) {
-		const entry = this.connections.get(id);
-		if (!entry) return;
-
-		try {
-			await entry.peer.addIceCandidate(candidate);
-		} catch (e) {
-			console.error("Failed to add ICE candidate", e);
-		}
 	}
 
 	// messaging
@@ -231,10 +216,6 @@ export class WebRTCManager {
 		}
 
 		switch (msg.type) {
-			case "ICE_CANDIDATE":
-				await this.handleIceCandidate(id, msg.candidate);
-				break;
-
 			case "REQUEST_MANIFEST":
 				await this.sendManifest(id);
 				break;

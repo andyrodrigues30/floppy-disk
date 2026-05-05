@@ -36,6 +36,7 @@ export class WebRTCManager {
 			reject: (err: any) => void;
 		}
 	>();
+	private readyConnections = new Set<string>();
 	private fileBuffers: Map<string, Uint8Array[]> = new Map();
 	private fileChunkTotals = new Map<string, number>();
 	private pendingManifestResolvers: Map<
@@ -278,6 +279,15 @@ export class WebRTCManager {
 
 			case "HANDSHAKE_ACK":
 				console.warn("Handshake ack:", msg.accepted);
+
+				if (msg.accepted) {
+					// mark connection as ready for sync
+					this.readyConnections.add(id);
+
+					console.log("Connection READY:", id);
+					this.updateUI();
+				}
+
 				break;
 		}
 	}
@@ -406,6 +416,10 @@ export class WebRTCManager {
 			}
 
 			this.pendingManifestResolvers.set(id, resolve);
+
+			if (!this.readyConnections.has(id)) {
+				throw new Error("Connection not ready for manifest request");
+			}
 
 			this.sendMessage(id, {
 				type: "REQUEST_MANIFEST",

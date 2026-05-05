@@ -172,7 +172,10 @@ export class WebRTCManager {
 
 		peer.onicecandidate = (event) => {
 			if (event.candidate) {
-				console.log("ICE candidate for", id);
+				this.sendMessage(id, {
+					type: "ICE_CANDIDATE",
+					candidate: event.candidate.toJSON(),
+				});
 			}
 		};
 
@@ -189,6 +192,21 @@ export class WebRTCManager {
 			this.connections.delete(id);
 			this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
 		};
+	}
+
+	// ice candidate
+	private async handleIceCandidate(
+		id: string,
+		candidate: RTCIceCandidateInit,
+	) {
+		const entry = this.connections.get(id);
+		if (!entry) return;
+
+		try {
+			await entry.peer.addIceCandidate(candidate);
+		} catch (e) {
+			console.error("Failed to add ICE candidate", e);
+		}
 	}
 
 	// messaging
@@ -211,6 +229,10 @@ export class WebRTCManager {
 		}
 
 		switch (msg.type) {
+			case "ICE_CANDIDATE":
+				await this.handleIceCandidate(id, msg.candidate);
+				break;
+
 			case "REQUEST_MANIFEST":
 				await this.sendManifest(id);
 				break;

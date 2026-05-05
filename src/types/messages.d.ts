@@ -4,6 +4,11 @@ export interface BaseMessage {
   type: string;
 }
 
+export interface ICECandidateMessage extends BaseMessage {
+  type: "ICE_CANDIDATE";
+  candidate: RTCIceCandidateInit;
+}
+
 export interface RequestManifestMessage extends BaseMessage {
   type: "REQUEST_MANIFEST";
 }
@@ -54,6 +59,7 @@ export interface HandshakeAckMessage extends BaseMessage {
 }
 
 export type Message =
+  | ICECandidateMessage
   | RequestManifestMessage
   | ManifestResponseMessage
   | FileRequestMessage

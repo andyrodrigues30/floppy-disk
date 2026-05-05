@@ -78,6 +78,8 @@ export class SyncManager {
 				localManifest,
 			);
 
+			this.plugin.snapshotManager.recordLastSynced(remoteDeviceId);
+
 			this.updateProgress(remoteDeviceId, {
 				phase: "complete",
 				currentFile: undefined,

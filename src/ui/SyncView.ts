@@ -105,6 +105,10 @@ export class SyncView extends ItemView {
               console.warn("Pausing...")
               this.plugin.syncManager.pauseDeviceSync(device.id)
             } else {
+              if (!this.plugin.webrtcManager.isConnected(device.id)) {
+                new Notice("Device not connected");
+                return;
+              }
               console.warn("Resuming...")
               await this.plugin.syncManager.startDeviceSync(device.id)
             }

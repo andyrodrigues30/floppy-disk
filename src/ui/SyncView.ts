@@ -51,9 +51,10 @@ export class SyncView extends ItemView {
         btn
           .setButtonText("Refresh")
           .onClick(async () => {
-            new Notice("Refreshing connections...");
-            await this.plugin.webrtcManager.reconnectAllDevices();
-            this.render();
+            new Notice("Reconnect not supported. Re-pair to reconnect.");
+            // new Notice("Refreshing connections...");
+            // await this.plugin.webrtcManager.reconnectAllDevices();
+            // this.render();
           })
       );
 

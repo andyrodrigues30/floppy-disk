@@ -127,6 +127,12 @@ export class WebRTCManager {
 		const peer = entry.peer;
 		const channel = entry.channel;
 
+		console.log("CHECK CONNECTION:", id, {
+			connectionState: peer.connectionState,
+			iceState: peer.iceConnectionState,
+			channel: channel.readyState
+		});
+
 		return (
 			peer.connectionState === "connected" &&
 			channel.readyState === "open"
@@ -134,7 +140,10 @@ export class WebRTCManager {
 	}
 
 	public async connectToDevice(id: string): Promise<string> {
-		if (this.isConnected(id)) return "";
+		if (this.connections.has(id)) {
+			console.warn("Already have connection for", id);
+			return "";
+		}
 
 		const peer = new RTCPeerConnection({
 			iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -147,7 +156,6 @@ export class WebRTCManager {
 		const offer = await peer.createOffer();
 		await peer.setLocalDescription(offer);
 
-		// wait for ICE to finish (IMPORTANT)
 		await this.waitForIceGathering(peer);
 
 		return JSON.stringify(peer.localDescription);

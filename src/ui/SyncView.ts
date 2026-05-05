@@ -66,6 +66,9 @@ export class SyncView extends ItemView {
       return
     }
 
+    console.log("UI DEVICE IDS:", devices.map(d => d.id));
+    console.log("CONNECTED IDS:", this.plugin.webrtcManager.getConnections());
+
     devices.forEach((device: Device) => {
 
       console.log(`[DEVICE STATUS] ${device.id}: ${this.plugin.webrtcManager.isConnected(device.id)}`)

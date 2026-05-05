@@ -138,7 +138,7 @@ export class WebRTCManager {
 			iceState: peer.iceConnectionState,
 			channel: channel.readyState
 		});
-		
+
 		return channel.readyState === "open";
 	}
 
@@ -174,6 +174,9 @@ export class WebRTCManager {
 			peer,
 			channel
 		});
+
+		console.log("CONNECTION MAP KEYS:", Array.from(this.connections.keys()));
+		console.log("CHECKING DEVICE ID:", id);
 
 		this.connections.set(id, { peer, channel });
 

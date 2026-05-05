@@ -10,7 +10,10 @@ import {
 
 import FloppyDiskPlugin from "../main";
 
-import { isFileChunkMessage, isFileCompleteMessage } from "../utils/messageGuards";
+import {
+	isFileChunkMessage,
+	isFileCompleteMessage,
+} from "../utils/messageGuards";
 import { generateManifest } from "../utils/manifest";
 import { FloppyDiskCrypto } from "../utils/cryptoHelper";
 import { isTextFile } from "../utils/isTextFile";
@@ -26,6 +29,7 @@ type ConnectionEntry = {
 export class WebRTCManager {
 	private plugin: FloppyDiskPlugin;
 	private connections: Map<string, ConnectionEntry> = new Map();
+	private connectionStates: Map<string, boolean> = new Map();
 	private fileBuffers: Map<string, Uint8Array[]> = new Map();
 	private fileChunkTotals = new Map<string, number>();
 	private pendingManifestResolvers: Map<
@@ -86,6 +90,7 @@ export class WebRTCManager {
 		await entry.peer.setRemoteDescription(answer);
 	}
 
+	// TODO: Delete following function after testing
 	private waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
 		return new Promise((resolve) => {
 			if (peer.iceGatheringState === "complete") {
@@ -102,7 +107,7 @@ export class WebRTCManager {
 	}
 
 	public isConnected(id: string): boolean {
-		return this.connections.get(id)?.peer.connectionState === "connected";
+		return this.connectionStates.get(id) ?? false;
 	}
 
 	public async connectToDevice(id: string): Promise<void> {
@@ -147,11 +152,16 @@ export class WebRTCManager {
 			}
 		};
 
-		channel.onopen = () => this.startHandshake(id);
+		channel.onopen = () => {
+			this.connectionStates.set(id, true);
+			this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
+			this.startHandshake(id);
+		};
 
 		channel.onmessage = (event) => this.handleMessage(id, event.data);
 
 		channel.onclose = () => {
+			this.connectionStates.set(id, false);
 			this.connections.delete(id);
 			this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
 		};

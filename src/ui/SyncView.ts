@@ -68,9 +68,8 @@ export class SyncView extends ItemView {
 
     devices.forEach((device: Device) => {
 
-      const isConnected = this.plugin.webrtcManager.isConnected(device.id);
-
-      const connectionStatus = isConnected ? "Online" : "Offline";
+      console.log(`[DEVICE STATUS] ${device.id}: ${this.plugin.webrtcManager.isConnected(device.id)}`)
+      const connectionStatus = this.plugin.webrtcManager.isConnected(device.id) ? "Online" : "Offline";
 
       if (!this.selectedDeviceId) {
         this.selectedDeviceId = device.id

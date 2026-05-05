@@ -177,6 +177,7 @@ export class WebRTCManager {
 
 		peer.onconnectionstatechange = () => {
 			const state = peer.connectionState;
+			console.log(`[attachConnection | onconnectionstatechange]: ${state}`)
 
 			if (
 				state === "failed" ||
@@ -190,6 +191,7 @@ export class WebRTCManager {
 		};
 
 		peer.oniceconnectionstatechange = () => {
+			console.log(`[attachConnection | oniceconnectionstatechange]: ${state}`)
 			this.updateUI();
 		};
 
@@ -200,6 +202,7 @@ export class WebRTCManager {
 		};
 
 		channel.onclose = () => {
+			console.log("Data channel CLOSED:", id);
 			this.connections.delete(id);
 			this.updateUI();
 		};

@@ -47,6 +47,10 @@ export class WebRTCManager {
 		this.plugin = plugin;
 	}
 
+	private updateUI() {
+		this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
+	};
+
 	// connect
 	private createPeer(id: string, isInitiator: boolean): RTCPeerConnection {
 		const peer = new RTCPeerConnection({
@@ -134,8 +138,11 @@ export class WebRTCManager {
 		});
 
 		return (
-			peer.connectionState === "connected" &&
-			channel.readyState === "open"
+			channel.readyState === "open" &&
+			(peer.connectionState === "connected" ||
+				peer.iceConnectionState === "connected" ||
+				peer.iceConnectionState === "completed" ||
+				channel.onopen !== null)
 		);
 	}
 
@@ -168,10 +175,6 @@ export class WebRTCManager {
 	) {
 		this.connections.set(id, { peer, channel });
 
-		const updateUI = () => {
-			this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
-		};
-
 		peer.onconnectionstatechange = () => {
 			const state = peer.connectionState;
 
@@ -183,22 +186,22 @@ export class WebRTCManager {
 				this.connections.delete(id);
 			}
 
-			updateUI();
+			this.updateUI();
 		};
 
 		peer.oniceconnectionstatechange = () => {
-			updateUI();
+			this.updateUI();
 		};
 
 		channel.onopen = () => {
 			console.log("Data channel OPEN:", id);
-			updateUI();
+			this.updateUI();
 			this.startHandshake(id);
 		};
 
 		channel.onclose = () => {
 			this.connections.delete(id);
-			updateUI();
+			this.updateUI();
 		};
 
 		channel.onmessage = (event) => this.handleMessage(id, event.data);

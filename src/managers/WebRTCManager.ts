@@ -101,7 +101,6 @@ export class WebRTCManager {
 		this.pendingConnections.delete(id);
 	}
 
-	// TODO: Delete following function after testing
 	private waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
 		return new Promise((resolve) => {
 			if (peer.iceGatheringState === "complete") {
@@ -144,22 +143,10 @@ export class WebRTCManager {
 		const offer = await peer.createOffer();
 		await peer.setLocalDescription(offer);
 
-		return new Promise<string>((resolve, reject) => {
-			this.pendingConnections.set(id, { resolve, reject });
+		// wait for ICE to finish (IMPORTANT)
+		await this.waitForIceGathering(peer);
 
-			channel.onopen = () => {
-				resolve(JSON.stringify(peer.localDescription));
-			};
-
-			setTimeout(() => {
-				if (this.pendingConnections.has(id)) {
-					this.pendingConnections.get(id)?.reject(
-						new Error("Connection timeout")
-					);
-					this.pendingConnections.delete(id);
-				}
-			}, 15000);
-		});
+		return JSON.stringify(peer.localDescription);
 	}
 
 	private attachConnection(

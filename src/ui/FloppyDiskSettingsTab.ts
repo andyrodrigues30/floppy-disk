@@ -4,6 +4,7 @@ import { FloppyDiskCrypto } from "../utils/cryptoHelper";
 import { SettingsDeviceRow } from "../ui/SettingsDeviceRow";
 import { Device } from "../types/device";
 import { WebRTCManager } from "../managers/WebRTCManager";
+import { CONNECTION_CHANGED_EVENT } from "../utils/events";
 
 export class FloppyDiskSettingsTab extends PluginSettingTab {
   declare plugin: FloppyDiskPlugin;
@@ -180,17 +181,32 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     try {
       const parsed = JSON.parse(pairCode.trim());
 
-      // offer
+      // OFFER (Device B receives)
       if (parsed?.type === "offer" && parsed?.sdp) {
         const pairingId = crypto.randomUUID();
+
         const answer = await this.plugin.webrtcManager.acceptOffer(
           pairingId,
           JSON.stringify(parsed)
         );
 
+        // Add remote device (from OFFER)
+        await this.plugin.deviceManager.addDevice({
+          id: parsed.deviceId,
+          publicKey: parsed.publicKey,
+          fingerprint: parsed.fingerprint,
+          name: parsed.deviceName,
+          addedAt: Date.now(),
+          trustStatus: "trusted",
+        });
+
         await navigator.clipboard.writeText(answer);
 
         await this.plugin.saveSettings();
+
+        // trigger UI update
+        this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
+
         this.plugin.refreshSettingsUI();
 
         if (this.pairCodeInput) this.pairCodeInput.value = "";
@@ -199,9 +215,8 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
         return;
       }
 
-      // answer
+      // ANSWER (Device A receives)
       if (parsed?.type === "answer" && parsed?.sdp) {
-
         if (!this.pairingConnectionId) {
           new Notice("No pairing session active.");
           return;
@@ -212,7 +227,19 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
           JSON.stringify(parsed)
         );
 
+        // trust remote device (from ANSWER)
+        await this.plugin.deviceManager.trustDevice(
+          parsed.deviceId,
+          parsed.deviceName,
+          parsed.publicKey,
+          parsed.fingerprint
+        );
+
         await this.plugin.saveSettings();
+
+        // trigger UI update
+        this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
+
         this.plugin.refreshSettingsUI();
 
         if (this.pairCodeInput) this.pairCodeInput.value = "";
@@ -224,7 +251,6 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
       }
 
       new Notice("Invalid pairing code");
-
     } catch (e) {
       new Notice("Invalid pairing code");
     }

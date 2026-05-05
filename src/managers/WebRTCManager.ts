@@ -51,18 +51,32 @@ export class WebRTCManager {
 		this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
 	};
 
+	private resolveDeviceId(id: string): string {
+		const trusted = this.plugin.deviceManager.getTrustedDevices();
+
+		const match = trusted.find(d => d.id === id);
+
+		if (match) return match.id;
+
+		console.warn("Unknown device id used in WebRTC:", id);
+		return id;
+	}
+
 	// connect
 	private createPeer(id: string, isInitiator: boolean): RTCPeerConnection {
 		const peer = new RTCPeerConnection({
 			iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 		});
 
+		const deviceId = this.resolveDeviceId(id);
+
 		if (isInitiator) {
 			const channel = peer.createDataChannel("floppy-disk");
-			this.attachConnection(id, peer, channel);
+			this.attachConnection(deviceId, peer, channel);
 		} else {
 			peer.ondatachannel = (event) => {
-				this.attachConnection(id, peer, event.channel);
+				const TEMP_ID = crypto.randomUUID();
+				this.attachConnection(TEMP_ID, peer, event.channel);
 			};
 		}
 
@@ -143,6 +157,11 @@ export class WebRTCManager {
 	}
 
 	public async connectToDevice(id: string): Promise<string> {
+		const trusted = this.plugin.deviceManager.getTrustedDevices();
+		if (!trusted.find(d => d.id === id)) {
+			throw new Error("Attempting to connect to unknown device");
+		}
+
 		if (this.connections.has(id)) {
 			console.warn("Already have connection for", id);
 			return "";
@@ -322,6 +341,21 @@ export class WebRTCManager {
 				this.plugin.refreshSettingsUI();
 
 				this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
+
+				const entry = [...this.connections.entries()]
+					.find(([_, conn]) => conn.channel.readyState === "open");
+
+				if (!entry) {
+					console.warn("No active connection found for handshake:", msg.deviceId);
+				} else {
+					const [tempId, conn] = entry;
+
+					// remove old key
+					this.connections.delete(tempId);
+
+					// rebind to trusted device id
+					this.connections.set(msg.deviceId, conn);
+				}
 			}
 		} catch (err) {
 			console.error("Handshake error:", err);

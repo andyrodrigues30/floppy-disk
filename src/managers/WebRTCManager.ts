@@ -128,6 +128,8 @@ export class WebRTCManager {
 		const entry = this.connections.get(id);
 		if (!entry) return false;
 
+		console.log("MAP STATE KEYS:", Array.from(this.connections.keys()));
+
 		const peer = entry.peer;
 		const channel = entry.channel;
 
@@ -173,6 +175,12 @@ export class WebRTCManager {
 		peer: RTCPeerConnection,
 		channel: RTCDataChannel,
 	) {
+
+		console.log("ATTACH:", id, {
+			peer,
+			channel
+		});
+
 		this.connections.set(id, { peer, channel });
 
 		peer.onconnectionstatechange = () => {
@@ -191,6 +199,7 @@ export class WebRTCManager {
 		};
 
 		peer.oniceconnectionstatechange = () => {
+			const state = peer.connectionState;
 			console.log(`[attachConnection | oniceconnectionstatechange]: ${state}`)
 			this.updateUI();
 		};

@@ -422,7 +422,6 @@ export class WebRTCManager {
 			throw new Error("WebRTCManager: snapshotManager not initialized");
 		}
 
-		// Device ID should come from plugin settings (single source of truth)
 		const id: string = this.plugin.settings.thisDevice.id;
 
 		if (!id) {
@@ -431,7 +430,7 @@ export class WebRTCManager {
 
 		const vaultId: string = this.plugin.app.vault.getName();
 
-		return generateManifest(this.plugin.app, vaultId, id);
+		return generateManifest(this.plugin.app, vaultId, id, this.plugin.snapshotManager);
 	}
 
 	public async requestRemoteManifest(id: string): Promise<Manifest> {

@@ -1,8 +1,11 @@
 import { Setting } from "obsidian";
-import FloppyDiskPlugin from "../main";
-import { Device } from "types/device";
 
-export class DeviceRow {
+import { Device } from "../types/device";
+
+import FloppyDiskPlugin from "../main";
+
+
+export class SettingsDeviceRow {
   private plugin: FloppyDiskPlugin;
   private containerEl: HTMLElement;
   private deviceId: string;
@@ -34,7 +37,7 @@ export class DeviceRow {
           .setWarning()
           .setButtonText("Revoke")
           .onClick(async () => {
-            this.plugin.deviceManager.removeDevice(device.id);
+            await this.plugin.deviceManager.removeDevice(device.id);
           })
       );
     }
@@ -45,7 +48,7 @@ export class DeviceRow {
         .setIcon("trash")
         .setTooltip("Delete device")
         .onClick(async (): Promise<void> => {
-          this.plugin.deviceManager.removeDevice(device.id);
+          await this.plugin.deviceManager.removeDevice(device.id);
         })
     );
   }

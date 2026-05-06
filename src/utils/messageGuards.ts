@@ -3,7 +3,7 @@ import {
     FileChunkMessage, FileCompleteMessage, FileRequestMessage,
     HandshakeAckMessage, HandshakeMessage,
     ManifestResponseMessage, RequestManifestMessage,
-} from "types/messages";
+} from "../types/messages";
 
 export function isRequestManifestMessage(obj: unknown): obj is RequestManifestMessage {
     return typeof obj === "object" && obj !== null && (obj as BaseMessage).type === "REQUEST_MANIFEST"
@@ -36,7 +36,7 @@ export function isFileChunkMessage(obj: unknown): obj is FileChunkMessage {
         typeof maybe.path === "string" &&
         typeof maybe.chunkIndex === "number" &&
         typeof maybe.totalChunks === "number" &&
-        maybe.data instanceof ArrayBuffer;
+        typeof maybe.data === "string"
 }
 
 

@@ -1,0 +1,1 @@
+export const CONNECTION_CHANGED_EVENT = "floppy-disk-connection-changed";

@@ -1,5 +1,7 @@
-import FloppyDiskPlugin from "../main";
 import { Notice } from "obsidian";
+
+import FloppyDiskPlugin from "../main";
+
 
 export function registerRegenerateKeysCommands(plugin: FloppyDiskPlugin): void {
     plugin.addCommand({

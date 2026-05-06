@@ -1,183 +1,189 @@
 import { App, TFile } from "obsidian";
 
-import { FloppyDiskSettings } from "types/settings";
-import { FileSnapshot, Snapshot } from "types/snapshot";
-import { Manifest } from "types/manifest";
-import { SyncProgress } from "types/sync";
+import { FloppyDiskSettings } from "../types/settings";
+import { FileSnapshot, Snapshot } from "../types/snapshot";
+import { Manifest } from "../types/manifest";
+import { SyncProgress } from "../types/sync";
 
 export class SnapshotManager {
-  private app: App
-  private snapshot: Snapshot | null = null
-  private SNAPSHOT_PATH: string
+	private app: App;
+	private snapshot: Snapshot | null = null;
+	private SNAPSHOT_PATH: string;
 
-  private activeSyncs: Set<string> = new Set()
-  private deviceProgress: Map<string, SyncProgress> = new Map()
-  private lastSynced: Map<string, number> = new Map()
+	private activeSyncs: Set<string> = new Set();
+	private deviceProgress: Map<string, SyncProgress> = new Map();
+	private lastSynced: Map<string, number> = new Map();
 
-  constructor(app: App, settings: FloppyDiskSettings) {
-    this.app = app
-    this.SNAPSHOT_PATH = `${this.app.vault.configDir}/snapshot.json`
-  }
+	constructor(app: App, settings: FloppyDiskSettings) {
+		this.app = app;
+		this.SNAPSHOT_PATH = `${this.app.vault.configDir}/snapshot.json`;
+	}
 
-  private createEmptySnapshot(): Snapshot {
-    return {
-      version: 1,
-      currentDeviceId: undefined,
-      files: {}
-    }
-  }
+	private createEmptySnapshot(): Snapshot {
+		return {
+			version: 1,
+			currentDeviceId: undefined,
+			files: {},
+		};
+	}
 
-  public async ensureSnapshotExists(): Promise<Snapshot> {
-    await this.loadSnapshot()
-    await this.saveSnapshot()
-    return this.snapshot as Snapshot
-  }
+	public async ensureSnapshotExists(): Promise<Snapshot> {
+		await this.loadSnapshot();
+		await this.saveSnapshot();
+		return this.snapshot as Snapshot;
+	}
 
-  private isValidSnapshot(obj: unknown): obj is Snapshot {
-    if (typeof obj !== "object" || obj === null) return false
-    const maybe = obj as Record<string, unknown>
-    return maybe.version === 1 && typeof maybe.files === "object"
-  }
+	private isValidSnapshot(obj: unknown): obj is Snapshot {
+		if (typeof obj !== "object" || obj === null) return false;
+		const maybe = obj as Record<string, unknown>;
+		return maybe.version === 1 && typeof maybe.files === "object";
+	}
 
-  public getSnapshot(): Snapshot | null {
-    return this.snapshot
-  }
+	public getSnapshot(): Snapshot | null {
+		return this.snapshot;
+	}
 
-  public async loadSnapshot(): Promise<Snapshot> {
-    if (this.snapshot) return this.snapshot
+	public async loadSnapshot(): Promise<Snapshot> {
+		if (this.snapshot) return this.snapshot;
 
-    const file = this.app.vault.getAbstractFileByPath(this.SNAPSHOT_PATH)
+		const file = this.app.vault.getAbstractFileByPath(this.SNAPSHOT_PATH);
 
-    if (!(file instanceof TFile)) {
-      this.snapshot = this.createEmptySnapshot()
-      await this.saveSnapshot()
-      return this.snapshot
-    }
+		if (!(file instanceof TFile)) {
+			this.snapshot = this.createEmptySnapshot();
+			await this.saveSnapshot();
+			return this.snapshot;
+		}
 
-    try {
-      const raw = await this.app.vault.read(file)
+		try {
+			const raw = await this.app.vault.read(file);
 
-      if (!raw.trim()) {
-        this.snapshot = this.createEmptySnapshot()
-      } else {
-        const parsed: unknown = JSON.parse(raw)
-        this.snapshot = this.isValidSnapshot(parsed)
-          ? parsed
-          : this.createEmptySnapshot()
-      }
-    } catch {
-      this.snapshot = this.createEmptySnapshot()
-    }
+			if (!raw.trim()) {
+				this.snapshot = this.createEmptySnapshot();
+			} else {
+				const parsed: unknown = JSON.parse(raw);
+				this.snapshot = this.isValidSnapshot(parsed)
+					? parsed
+					: this.createEmptySnapshot();
+			}
+		} catch {
+			this.snapshot = this.createEmptySnapshot();
+		}
 
-    return this.snapshot
-  }
+		return this.snapshot;
+	}
 
-  public async saveSnapshot(): Promise<void> {
-    if (!this.snapshot) {
-      this.snapshot = this.createEmptySnapshot()
-    }
+	public async saveSnapshot(): Promise<void> {
+		if (!this.snapshot) {
+			this.snapshot = this.createEmptySnapshot();
+		}
 
-    const content = JSON.stringify(this.snapshot, null, 2)
-    const file = this.app.vault.getAbstractFileByPath(this.SNAPSHOT_PATH)
+		const content = JSON.stringify(this.snapshot, null, 2);
+		const file = this.app.vault.getAbstractFileByPath(this.SNAPSHOT_PATH);
 
-    if (file instanceof TFile) {
-      await this.app.vault.modify(file, content)
-    } else {
-      await this.app.vault.adapter.write(this.SNAPSHOT_PATH, content)
-    }
-  }
+		if (file instanceof TFile) {
+			await this.app.vault.modify(file, content);
+		} else {
+			await this.app.vault.adapter.write(this.SNAPSHOT_PATH, content);
+		}
+	}
 
-  public async setCurrentDevice(deviceId: string) {
-    if (!this.snapshot) {
-      this.snapshot = this.createEmptySnapshot()
-    }
+	public async setCurrentDevice(id: string) {
+		if (!this.snapshot) {
+			this.snapshot = this.createEmptySnapshot();
+		}
 
-    this.snapshot.currentDeviceId = deviceId
-    await this.saveSnapshot()
-  }
+		this.snapshot.currentDeviceId = id;
+		await this.saveSnapshot();
+	}
 
-  // sync state
-  public startDeviceSync(deviceId: string) {
-    this.activeSyncs.add(deviceId);
-  }
+	// sync state
+	public isDeviceSyncing(id: string): boolean {
+		return this.activeSyncs.has(id);
+	}
 
-  public pauseDeviceSync(deviceId: string) {
-    this.activeSyncs.delete(deviceId);
-  }
+	public startDeviceSync(id: string) {
+		this.activeSyncs.add(id);
+	}
 
-  public isDeviceSyncing(deviceId: string): boolean {
-    return this.activeSyncs.has(deviceId);
-  }
+	public pauseDeviceSync(id: string) {
+		this.activeSyncs.delete(id);
+	}
 
-  // progress tracking
-  public setDeviceProgress(deviceId: string, progress: SyncProgress) {
-    this.deviceProgress.set(deviceId, progress)
-  }
+	public finishDeviceSync(id: string) {
+		this.activeSyncs.delete(id);
+	}
 
-  public getDeviceProgress(deviceId: string): SyncProgress | undefined {
-    return this.deviceProgress.get(deviceId)
-  }
+	// progress tracking
+	public setDeviceProgress(id: string, progress: SyncProgress) {
+		this.deviceProgress.set(id, progress);
+	}
 
-  // last synced
-  public getLastSynced(deviceId: string): number | undefined {
-    return this.lastSynced.get(deviceId)
-  }
+	public getDeviceProgress(id: string): SyncProgress | undefined {
+		return this.deviceProgress.get(id);
+	}
 
-  private updateLastSynced(deviceId: string) {
-    this.lastSynced.set(deviceId, Date.now())
-  }
+	// last synced
+	public getLastSynced(id: string): number | undefined {
+		return this.lastSynced.get(id);
+	}
 
-  // sync updates
-  public async updateSnapshotAfterSync(
-    remoteDeviceId: string,
-    finalManifest: Manifest
-  ): Promise<Snapshot> {
-    const snapshot = await this.loadSnapshot()
+	private updateLastSynced(id: string) {
+		this.lastSynced.set(id, Date.now());
+	}
 
-    if (!snapshot.currentDeviceId) {
-      throw new Error("FloppyDisk: currentDeviceId missing")
-    }
+	// sync updates
+	public async updateSnapshotAfterSync(
+		remoteDeviceId: string,
+		finalManifest: Manifest,
+	): Promise<Snapshot> {
+		const snapshot = await this.loadSnapshot();
 
-    const currentDeviceId = snapshot.currentDeviceId
-    const now = Date.now()
+		if (!snapshot.currentDeviceId) {
+			throw new Error("FloppyDisk: currentDeviceId missing");
+		}
 
-    for (const [path, hash] of Object.entries(finalManifest.files)) {
-      const fileSnapshot: FileSnapshot = {
-        lastSyncedHash: hash,
-        lastSyncedTimestamp: now,
-        lastSyncedBy: currentDeviceId
-      }
+		const currentDeviceId = snapshot.currentDeviceId;
+		const now = Date.now();
 
-      snapshot.files[path] = fileSnapshot
-    }
+		for (const [path, hash] of Object.entries(finalManifest.files)) {
+			const fileSnapshot: FileSnapshot = {
+				lastSyncedHash: hash,
+				lastSyncedTimestamp: now,
+				lastSyncedBy: currentDeviceId,
+			};
 
-    this.updateLastSynced(remoteDeviceId)
+			snapshot.files[path] = fileSnapshot;
+		}
 
-    await this.saveSnapshot()
-    return snapshot
-  }
+		await this.saveSnapshot();
+		return snapshot;
+	}
 
-  public async updateFileSync(
-    filePath: string,
-    fileHash: string
-  ): Promise<void> {
-    const snapshot = await this.loadSnapshot()
+	public async updateFileSync(
+		filePath: string,
+		fileHash: string,
+	): Promise<void> {
+		const snapshot = await this.loadSnapshot();
 
-    if (!snapshot.currentDeviceId) {
-      throw new Error("FloppyDisk: currentDeviceId missing")
-    }
+		if (!snapshot.currentDeviceId) {
+			throw new Error("FloppyDisk: currentDeviceId missing");
+		}
 
-    const deviceId = snapshot.currentDeviceId
-    const now = Date.now()
+		const deviceId = snapshot.currentDeviceId;
+		const now = Date.now();
 
-    const fileSnapshot: FileSnapshot = {
-      lastSyncedHash: fileHash,
-      lastSyncedTimestamp: now,
-      lastSyncedBy: deviceId
-    }
+		const fileSnapshot: FileSnapshot = {
+			lastSyncedHash: fileHash,
+			lastSyncedTimestamp: now,
+			lastSyncedBy: deviceId,
+		};
 
-    snapshot.files[filePath] = fileSnapshot
+		snapshot.files[filePath] = fileSnapshot;
 
-    await this.saveSnapshot()
-  }
+		await this.saveSnapshot();
+	}
+
+	public recordLastSynced(id: string) {
+		this.lastSynced.set(id, Date.now());
+	}
 }

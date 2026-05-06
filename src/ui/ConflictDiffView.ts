@@ -4,10 +4,11 @@ import {
     Setting,
     Notice
 } from "obsidian";
-
 import { diffLines } from "diff";
-import { FileConflict } from "types/sync";
-import FloppyDiskPlugin from "main";
+
+import { FileConflict } from "../types/sync";
+import FloppyDiskPlugin from "../main";
+
 
 export const CONFLICT_DIFF_VIEW_TYPE =
     "floppy-disk-conflict-diff-view";
@@ -29,7 +30,7 @@ export class ConflictDiffView extends ItemView {
 
     getViewType() { return CONFLICT_DIFF_VIEW_TYPE; }
 
-    getDisplayText() { return "Conflict Resolution"; }
+    getDisplayText() { return "Conflict resolution"; }
 
     getIcon() { return "alert-triangle"; }
 
@@ -65,7 +66,7 @@ export class ConflictDiffView extends ItemView {
             return;
         }
 
-        contentEl.createEl("h2", { text: "Resolve Conflict" });
+        contentEl.createEl("h2", { text: "Resolve conflict" });
         contentEl.createEl("h3", { text: this.conflict.path });
 
         // Three-way diff sections
@@ -88,13 +89,13 @@ export class ConflictDiffView extends ItemView {
         new Setting(container)
             .addButton(btn =>
                 btn
-                    .setButtonText("Keep Local")
+                    .setButtonText("Keep local")
                     .setCta()
                     .onClick(() => this.resolve("local"))
             )
             .addButton(btn =>
                 btn
-                    .setButtonText("Keep Remote")
+                    .setButtonText("Keep remote")
                     .setCta()
                     .onClick(() => this.resolve("remote"))
             );

@@ -1,19 +1,20 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
-import FloppyDiskPlugin from "main";
-import { FloppyDiskCrypto } from "utils/cryptoHelper";
-import { DeviceRow } from "ui/DeviceRow";
-import { Device } from "types/device";
-import { WebRTCManager } from "managers/WebRTCManager";
+import FloppyDiskPlugin from "../main";
+import { FloppyDiskCrypto } from "../utils/cryptoHelper";
+import { SettingsDeviceRow } from "../ui/SettingsDeviceRow";
+import { Device } from "../types/device";
+import { WebRTCManager } from "../managers/WebRTCManager";
+import { CONNECTION_CHANGED_EVENT } from "../utils/events";
 
 export class FloppyDiskSettingsTab extends PluginSettingTab {
   declare plugin: FloppyDiskPlugin;
   private webrtc: WebRTCManager;
-  private deviceId: string;
+  private pairingConnectionId?: string;
+  private pairCodeInput?: HTMLTextAreaElement;
 
   constructor(app: App, plugin: FloppyDiskPlugin, webrtc: WebRTCManager, deviceId: string) {
     super(app, plugin);
     this.webrtc = webrtc;
-    this.deviceId = deviceId;
   }
 
   display(): void {
@@ -41,9 +42,9 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
       .addText((text) =>
         text
           .setPlaceholder("Optional")
-          .setValue(this.plugin.settings.deviceName ?? "")
+          .setValue(this.plugin.settings.thisDevice.name ?? "")
           .onChange(async (value: string) => {
-            this.plugin.settings.deviceName = value.trim();
+            this.plugin.settings.thisDevice.name = value.trim();
             await this.plugin.saveSettings();
           })
       );
@@ -70,14 +71,15 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
           .onClick(async () => {
             await this.regenerateKeys();
             new Notice("Keys regenerated.");
-            this.display();
+            this.plugin.refreshSettingsUI();
           })
       );
   }
 
   private renderPairDevice(containerEl: HTMLElement): void {
     new Setting(containerEl)
-      .setName("Pair new device").setHeading()
+      .setName("Pair new device")
+      .setHeading();
 
     new Setting(containerEl)
       .setName("Copy code")
@@ -89,24 +91,30 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
       );
 
     let pairCode = "";
+
     new Setting(containerEl)
       .setName("Pair code")
       .setDesc("Code generated from other device")
       .addTextArea((text) => {
         text
+          .setPlaceholder("Paste pairing code here")
           .onChange((value: string) => {
             pairCode = value.trim();
           });
 
         text.inputEl.classList.add("settings-pair-code");
+
+        // store reference so it can be cleared later
+        this.pairCodeInput = text.inputEl;
       })
       .addButton((btn) =>
         btn
           .setCta()
           .setButtonText("Pair devices")
-          .onClick(async (): Promise<void> => await this.submitPairCode(pairCode))
+          .onClick(async (): Promise<void> => {
+            await this.submitPairCode(pairCode);
+          })
       );
-
   }
 
   private renderDevices(containerEl: HTMLElement): void {
@@ -118,39 +126,67 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     }
 
     devices.forEach((device) => {
-      new DeviceRow(containerEl, this.plugin, device).render();
+      new SettingsDeviceRow(containerEl, this.plugin, device).render();
     });
   }
 
   public async regenerateKeys(): Promise<void> {
     if (!this.plugin.settings.thisDevice) return;
 
-    const newKeys = await FloppyDiskCrypto.generateDeviceKeys();
+    // generate new runtime keys
+    const signingKeys = await FloppyDiskCrypto.generateSigningKeyPair();
+    const encryptionKeys = await FloppyDiskCrypto.generateEncryptionKeyPair();
 
-    const exportedPublicKey = await FloppyDiskCrypto.computeExportedKey(
-      newKeys.signingKeyPair.publicKey
-    );
+    // export signing keys
+    const signingPublicJwk = await FloppyDiskCrypto.exportSigningPublicKey(signingKeys.publicKey);
+    const signingPrivateJwk = await FloppyDiskCrypto.exportSigningPrivateKey(signingKeys.privateKey);
 
-    const publicKeyBase64 = btoa(JSON.stringify(exportedPublicKey));
+    // export encryption keys
+    const encryptionPublicJwk = await FloppyDiskCrypto.exportEncryptionPublicKey(encryptionKeys.publicKey);
+    const encryptionPrivateJwk = await FloppyDiskCrypto.exportEncryptionPrivateKey(encryptionKeys.privateKey);
 
-    const fingerprint =
-      await FloppyDiskCrypto.computeFingerprint(publicKeyBase64);
+    // fingerprint based on signing public key
+    const publicKeyString = JSON.stringify(signingPublicJwk);
+    const fingerprint = await FloppyDiskCrypto.computeFingerprint(publicKeyString);
 
+    // update stored device
     this.plugin.settings.thisDevice = {
       ...this.plugin.settings.thisDevice,
-      publicKey: publicKeyBase64,
+
+      publicKey: publicKeyString,
       fingerprint,
-      signingKeyPair: newKeys.signingKeyPair,
-      encryptionKeyPair: newKeys.encryptionKeyPair,
-      privateKey: newKeys.signingKeyPair.privateKey,
+
+      signingKeyPair: {
+        publicKeyJwk: signingPublicJwk,
+        privateKeyJwk: signingPrivateJwk,
+      },
+
+      encryptionKeyPair: {
+        publicKeyJwk: encryptionPublicJwk,
+        privateKeyJwk: encryptionPrivateJwk,
+      },
     };
 
     await this.plugin.saveSettings();
   }
 
   private async copyPairCode() {
-    const offer = await this.webrtc.createPairingOffer();
-    await navigator.clipboard.writeText(offer);
+    this.pairingConnectionId = crypto.randomUUID();
+
+    const offer = await this.plugin.webrtcManager.createOffer(this.pairingConnectionId);
+
+    const payload = {
+      type: "PAIR_OFFER",
+      sessionId: this.pairingConnectionId,
+      deviceId: this.plugin.settings.thisDevice.id,
+      deviceName: this.plugin.settings.thisDevice.name,
+      publicKey: this.plugin.settings.thisDevice.publicKey,
+      fingerprint: this.plugin.settings.thisDevice.fingerprint,
+      offer: JSON.parse(offer),
+    };
+
+    await navigator.clipboard.writeText(JSON.stringify(payload));
+
     new Notice("Code copied, add it to the other device.");
   }
 
@@ -158,37 +194,93 @@ export class FloppyDiskSettingsTab extends PluginSettingTab {
     try {
       const parsed = JSON.parse(pairCode.trim());
 
-      // recieve offer
-      if (parsed?.type === "PAIR_OFFER") {
-        const answer = await this.webrtc.acceptPairingOffer(parsed);
+      // handle pair offer
+      if (parsed?.type === "PAIR_OFFER" && parsed?.offer) {
+        const pairingId = crypto.randomUUID();
 
-        await navigator.clipboard.writeText(answer);
-        new Notice("Pairing");
-        
-        return;
-      }
+        // create answer from received offer
+        const answer = await this.plugin.webrtcManager.acceptOffer(
+          pairingId,
+          JSON.stringify(parsed.offer)
+        );
 
-      // complete pairing
-      if (parsed?.type === "PAIR_ANSWER") {
-        await this.webrtc.completePairing(parsed);
-
-        // trust after pairing
-        if (parsed.deviceId && parsed.deviceName && parsed.publicKey) {
-          await this.plugin.deviceManager.trustDevice(parsed.deviceId, parsed.deviceName, parsed.publicKey);
+        // trust the remote device
+        if (!parsed.deviceId || !parsed.publicKey || !parsed.fingerprint) {
+          new Notice("Invalid pairing data (missing identity).");
+          return;
         }
 
+        await this.plugin.deviceManager.trustDevice(
+          parsed.deviceId,
+          parsed.deviceName,
+          parsed.publicKey,
+          parsed.fingerprint
+        );
+
+        // build response payload
+        const response = {
+          type: "PAIR_ANSWER",
+          sessionId: pairingId,
+          deviceId: this.plugin.settings.thisDevice.id,
+          deviceName: this.plugin.settings.thisDevice.name,
+          publicKey: this.plugin.settings.thisDevice.publicKey,
+          fingerprint: this.plugin.settings.thisDevice.fingerprint,
+          answer: JSON.parse(answer),
+        };
+
+        await navigator.clipboard.writeText(JSON.stringify(response));
+
         await this.plugin.saveSettings();
+        this.plugin.refreshSettingsUI();
 
-        // refresh UI
-        this.plugin.settingsTab?.display();
+        if (this.pairCodeInput) this.pairCodeInput.value = "";
 
-        new Notice("Pairing complete");
-
+        new Notice("Answer copied. Send it back to the other device.");
         return;
       }
 
+      // handle pair answer
+      if (parsed?.type === "PAIR_ANSWER" && parsed?.answer) {
+        if (!this.pairingConnectionId) {
+          new Notice("No pairing session active.");
+          return;
+        }
+
+        // finalize WebRTC connection
+        await this.plugin.webrtcManager.finalizeConnection(
+          this.pairingConnectionId,
+          JSON.stringify(parsed.answer)
+        );
+
+        // trust the remote device
+        if (!parsed.deviceId || !parsed.publicKey || !parsed.fingerprint) {
+          new Notice("Invalid pairing data (missing identity).");
+          return;
+        }
+
+        await this.plugin.deviceManager.trustDevice(
+          parsed.deviceId,
+          parsed.deviceName,
+          parsed.publicKey,
+          parsed.fingerprint
+        );
+
+        await this.plugin.saveSettings();
+        this.plugin.refreshSettingsUI();
+
+        if (this.pairCodeInput) this.pairCodeInput.value = "";
+
+        this.pairingConnectionId = undefined;
+
+        new Notice("Pairing complete!");
+        return;
+      }
+
+      // invalid input
       new Notice("Invalid pairing code");
-    } catch {
+
+    } catch (e) {
+      console.error(e);
       new Notice("Invalid pairing code");
     }
   }

@@ -1,10 +1,8 @@
 import { Notice } from "obsidian";
 
-import { Device } from "types/device";
+import { Device } from "../types/device";
 
-import FloppyDiskPlugin from "main";
-
-import { FloppyDiskCrypto } from "utils/cryptoHelper"
+import FloppyDiskPlugin from "../main";
 
 export class DeviceManager {
     private plugin: FloppyDiskPlugin
@@ -27,8 +25,8 @@ export class DeviceManager {
     }
 
     // revoke a device
-    public async revokeDevice(deviceId: string): Promise<void> {
-        const device = this.plugin.settings.devices[deviceId];
+    public async revokeDevice(id: string): Promise<void> {
+        const device = this.plugin.settings.devices[id];
         if (!device) return;
 
         device.trustStatus = "revoked";
@@ -41,10 +39,10 @@ export class DeviceManager {
     }
 
     // remove a device entirely
-    public async removeDevice(deviceId: string): Promise<void> {
-        if (!this.plugin.settings.devices[deviceId]) return;
+    public async removeDevice(id: string): Promise<void> {
+        if (!this.plugin.settings.devices[id]) return;
 
-        delete this.plugin.settings.devices[deviceId];
+        delete this.plugin.settings.devices[id];
 
         await this.plugin.saveSettings();
 
@@ -53,8 +51,8 @@ export class DeviceManager {
         this.plugin.refreshSettingsUI();
     }
 
-    async updateLastSeen(deviceId: string): Promise<void> {
-        const device = this.plugin.settings.devices[deviceId]
+    async updateLastSeen(id: string): Promise<void> {
+        const device = this.plugin.settings.devices[id]
         if (!device) return
 
         device.lastSeen = Date.now()
@@ -62,32 +60,25 @@ export class DeviceManager {
     }
 
     public async trustDevice(
-        deviceId: string,
-        deviceName: string,
-        publicKey: string
+        id: string,
+        name: string,
+        publicKey: string,
+        fingerprint: string
     ): Promise<void> {
-        const devices = this.plugin.settings.devices;
+
         const now = Date.now();
-
-        const fingerprint = await FloppyDiskCrypto.computeFingerprint(publicKey);
-        const existing = devices[deviceId];
-
-        if (existing) {
-            existing.trustStatus = "trusted";
-            existing.publicKey = publicKey;
-            existing.lastSeen = now;
-        } else {
-            devices[deviceId] = {
-                id: deviceId,
-                name: deviceName ?? deviceId,
-                publicKey,
-                fingerprint,
-                trustStatus: "trusted",
-                addedAt: now,
-                lastSeen: now
-            };
-        }
+        this.plugin.settings.devices[id] = {
+            id,
+            name: name ?? id,
+            publicKey,
+            fingerprint,
+            trustStatus: "trusted",
+            addedAt: now,
+            lastSeen: now
+        };
 
         await this.plugin.saveSettings();
+
+        this.plugin.refreshSettingsUI();
     }
 }

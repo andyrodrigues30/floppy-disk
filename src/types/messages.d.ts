@@ -1,7 +1,12 @@
-import { Manifest } from "types/manifest";
+import { Manifest } from "../types/manifest";
 
 export interface BaseMessage {
   type: string;
+}
+
+export interface ICECandidateMessage extends BaseMessage {
+  type: "ICE_CANDIDATE";
+  candidate: RTCIceCandidateInit;
 }
 
 export interface RequestManifestMessage extends BaseMessage {
@@ -23,7 +28,7 @@ export interface FileChunkMessage extends BaseMessage {
   path: string;
   chunkIndex: number;
   totalChunks: number;
-  data: ArrayBuffer;
+  data: string;
 }
 
 export interface FileCompleteMessage extends BaseMessage {
@@ -52,3 +57,14 @@ export interface HandshakeAckMessage extends BaseMessage {
   type: "HANDSHAKE_ACK";
   accepted: boolean;
 }
+
+export type Message =
+  | ICECandidateMessage
+  | RequestManifestMessage
+  | ManifestResponseMessage
+  | FileRequestMessage
+  | FileChunkMessage
+  | FileCompleteMessage
+  | ConflictNotificationMessage
+  | HandshakeMessage
+  | HandshakeAckMessage;

@@ -1,6 +1,31 @@
-import { DeviceKeys } from "types/device";
+import { DeviceKeys } from "../types/device";
 
 export class FloppyDiskCrypto {
+
+  public static async initializeDeviceKeys(settings: any): Promise<void> {
+    const keyPair = await this.generateSigningKeyPair();
+
+    const privateKeyJwk = await this.exportSigningPrivateKey(keyPair.privateKey);
+    const publicKeyJwk = await this.exportSigningPublicKey(keyPair.publicKey);
+
+    const exportedPublicKey = btoa(JSON.stringify(publicKeyJwk));
+
+    const fingerprint = await this.computeFingerprint(exportedPublicKey);
+
+    const id = settings.thisDevice?.id ?? crypto.randomUUID()
+
+    settings.thisDevice = {
+      id: id,
+      name: settings.thisDevice?.name ?? id,
+      publicKey: exportedPublicKey,
+      fingerprint,
+      signingKeyPair: {
+        publicKeyJwk,
+        privateKeyJwk,
+      },
+    };
+  }
+
   // signing key pair (ECDSA) - for handshakes and identity
   public static async generateSigningKeyPair(): Promise<CryptoKeyPair> {
     return crypto.subtle.generateKey(
@@ -20,7 +45,35 @@ export class FloppyDiskCrypto {
       data
     );
   }
-  
+
+  public static async exportSigningPrivateKey(privateKey: CryptoKey): Promise<JsonWebKey> {
+    return crypto.subtle.exportKey("jwk", privateKey);
+  }
+
+  public static async exportSigningPublicKey(publicKey: CryptoKey): Promise<JsonWebKey> {
+    return crypto.subtle.exportKey("jwk", publicKey);
+  }
+
+  public static async importSigningPrivateKey(jwk: JsonWebKey): Promise<CryptoKey> {
+    return crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      { name: "ECDSA", namedCurve: "P-256" },
+      true,
+      ["sign"]
+    );
+  }
+
+  public static async importSigningPublicKey(jwk: JsonWebKey): Promise<CryptoKey> {
+    return crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      { name: "ECDSA", namedCurve: "P-256" },
+      true,
+      ["verify"]
+    );
+  }
+
   // encryption key pair (RSA-OAEP) - optional file/message encryption
   public static async generateEncryptionKeyPair(): Promise<CryptoKeyPair> {
     return crypto.subtle.generateKey(
@@ -47,6 +100,53 @@ export class FloppyDiskCrypto {
     return crypto.subtle.decrypt(
       { name: "RSA-OAEP" },
       privateKey,
+      data
+    );
+  }
+
+  public static async exportEncryptionPrivateKey(privateKey: CryptoKey): Promise<JsonWebKey> {
+    return crypto.subtle.exportKey("jwk", privateKey);
+  }
+
+  public static async exportEncryptionPublicKey(publicKey: CryptoKey): Promise<JsonWebKey> {
+    return crypto.subtle.exportKey("jwk", publicKey);
+  }
+
+  public static async importEncryptionPrivateKey(jwk: JsonWebKey): Promise<CryptoKey> {
+    return crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      {
+        name: "RSA-OAEP",
+        hash: "SHA-256",
+      },
+      true,
+      ["decrypt"]
+    );
+  }
+
+  public static async importEncryptionPublicKey(jwk: JsonWebKey): Promise<CryptoKey> {
+    return crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      {
+        name: "RSA-OAEP",
+        hash: "SHA-256",
+      },
+      true,
+      ["encrypt"]
+    );
+  }
+
+  public static async verifySignature(
+    publicKey: CryptoKey,
+    signature: ArrayBuffer,
+    data: ArrayBuffer
+  ): Promise<boolean> {
+    return crypto.subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      publicKey,
+      signature,
       data
     );
   }

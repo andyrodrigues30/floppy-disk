@@ -1,605 +1,663 @@
 import { Notice, TFile } from "obsidian";
 
-import { Device, RemoteDevice } from "types/device";
-import { Manifest } from "types/manifest";
-import { PairingOfferMessage, PairingAnswerMessage } from "types/pairing";
+import { Manifest } from "../types/manifest";
 import {
-    BaseMessage,
-    RequestManifestMessage,
-    ManifestResponseMessage,
-    FileChunkMessage,
-    HandshakeMessage,
-    HandshakeAckMessage,
-    FileCompleteMessage
-} from "types/messages";
+	ManifestResponseMessage,
+	FileChunkMessage,
+	HandshakeMessage,
+	Message,
+} from "../types/messages";
+
+import FloppyDiskPlugin from "../main";
+
 import {
-    isConflictNotificationMessage,
-    isFileChunkMessage,
-    isFileCompleteMessage,
-    isFileRequestMessage,
-    isHandshakeAckMessage,
-    isHandshakeMessage,
-    isManifestResponseMessage,
-    isRequestManifestMessage,
-} from "utils/messageGuards";
-
-import FloppyDiskPlugin from "main";
-
+	isFileChunkMessage,
+	isFileCompleteMessage,
+} from "../utils/messageGuards";
 import { generateManifest } from "../utils/manifest";
-import { FloppyDiskCrypto } from "utils/cryptoHelper";
-import { isTextFile } from "utils/isTextFile";
+import { FloppyDiskCrypto } from "../utils/cryptoHelper";
+import { isTextFile } from "../utils/isTextFile";
+import { CONNECTION_CHANGED_EVENT } from "../utils/events";
 
 const CHUNK_SIZE = 64 * 1024;
 
+type ConnectionEntry = {
+	peer: RTCPeerConnection;
+	channel: RTCDataChannel;
+};
+
 export class WebRTCManager {
-    private plugin: FloppyDiskPlugin;
-    private remoteDevices: Map<string, RemoteDevice> = new Map();
-    private pairingSessions: Map<string, RTCPeerConnection> = new Map();
-    private channels: Record<string, RTCDataChannel> = {};
-    private fileBuffers: Record<string, Uint8Array[]> = {};
-
-    constructor(plugin: FloppyDiskPlugin) {
-        this.plugin = plugin;
-    }
-
-    // connect to a device
-    public connect(deviceId: string, channel: RTCDataChannel, connection: RTCPeerConnection) {
-
-        this.channels[deviceId] = channel
-        
-        const device = this.plugin.deviceManager.getDeviceById(deviceId)
-
-        if (device) {
-            this.remoteDevices.set(deviceId, {
-                device,
-                connection,
-                channel
-            })
-        }
-
-        channel.onopen = async () => {
-            await this.startHandshake(deviceId)
-        }
-
-        channel.onmessage = async (event) => {
-            await this.handleMessage(deviceId, event.data)
-        }
-
-        channel.onclose = () => {
-            delete this.channels[deviceId]
-            this.remoteDevices.delete(deviceId)
-        }
-    }
-
-    // send message to a connected device
-    public sendMessage(deviceId: string, msg: BaseMessage | FileChunkMessage) {
-        const channel = this.channels[deviceId]
-        if (!channel || channel.readyState !== "open") return
-
-        if ("data" in msg && msg.data instanceof ArrayBuffer) {
-            channel.send(msg.data)
-        } else {
-            channel.send(JSON.stringify(msg))
-        }
-    }
-
-    // handle incoming messages
-    private async handleMessage(deviceId: string, data: string | ArrayBuffer) {
-        try {
-            if (typeof data === "string") {
-                const parsed: unknown = JSON.parse(data)
-                if (isRequestManifestMessage(parsed)) {
-                    await this.sendManifest(deviceId)
-                } else if (isManifestResponseMessage(parsed)) {
-                    console.warn("Received manifest from", deviceId, parsed.payload)
-                } else if (isFileRequestMessage(parsed)) {
-                    await this.sendFileInChunks(deviceId, parsed.path)
-                } else if (isFileChunkMessage(parsed)) {
-                    await this.handleFileChunk(parsed)
-                } else if (isFileCompleteMessage(parsed)) {
-                    await this.assembleFile(parsed.path)
-                } else if (isConflictNotificationMessage(parsed)) {
-                    console.warn("Conflict detected on file", parsed.path)
-                } else if (isHandshakeMessage(parsed)) {
-                    await this.handleHandshake(parsed)
-                } else if (isHandshakeAckMessage(parsed)) {
-                    console.warn("Handshake ack from", deviceId, parsed.accepted)
-                } else {
-                    console.warn("Unknown message received", parsed)
-                }
-            } else if (data instanceof ArrayBuffer) {
-                console.warn("Unexpected raw ArrayBuffer received from", deviceId)
-            }
-        } catch (err) {
-            console.error("WebRTCManager: Failed to parse message", err)
-        }
-    }
-
-    // generate local manifest
-    public async generateLocalManifest(): Promise<Manifest> {
-        if (!this.plugin.snapshotManager) {
-            throw new Error("WebRTCManager: snapshotManager not initialized");
-        }
-
-        // Device ID should come from plugin settings (single source of truth)
-        const deviceId: string = this.plugin.settings.thisDevice.id;
-
-        if (!deviceId) {
-            throw new Error("Current device ID is missing in settings");
-        }
-
-        const vaultId: string = this.plugin.app.vault.getName();
-
-        return generateManifest(
-            this.plugin.app,
-            vaultId,
-            deviceId
-        );
-    }
-
-    public async requestRemoteManifest(deviceId: string): Promise<Manifest> {
-        const channel = this.channels[deviceId];
-        if (!channel || channel.readyState !== "open") {
-            throw new Error(`No open channel to device ${deviceId}`);
-        }
-
-        return new Promise<Manifest>((resolve, reject) => {
-            const handleMessage = (event: MessageEvent<string | ArrayBuffer>) => {
-                if (typeof event.data === "string") {
-                    let parsed: unknown;
-                    try {
-                        parsed = JSON.parse(event.data);
-                    } catch {
-                        return; // invalid JSON
-                    }
-
-                    // check parsed message
-                    if (isManifestResponseMessage(parsed)) {
-                        channel.removeEventListener("message", handleMessage);
-                        resolve(parsed.payload);
-                    }
-                }
-            };
-
-            channel.addEventListener("message", handleMessage);
-
-            // send request manifest message
-            const request: RequestManifestMessage = { type: "REQUEST_MANIFEST" };
-            this.sendMessage(deviceId, request);
-
-            setTimeout(() => {
-                channel.removeEventListener("message", handleMessage);
-                reject(new Error(`Manifest request to ${deviceId} timed out`));
-            }, 5000);
-        });
-    }
-
-    // send local manifest to a remote device
-    private async sendManifest(deviceId: string) {
-        const manifest: Manifest = await this.generateLocalManifest()
-        const msg: ManifestResponseMessage = {
-            type: "MANIFEST_RESPONSE",
-            payload: manifest
-        }
-        this.sendMessage(deviceId, msg)
-    }
-
-    private async startHandshake(deviceId: string): Promise<void> {
-        const device = this.plugin.settings.thisDevice;
-
-        const payload = new TextEncoder().encode(device.fingerprint);
-
-        const signature = await FloppyDiskCrypto.signData(
-            device.signingKeyPair.privateKey,
-            payload.buffer
-        );
-
-        const handshake: HandshakeMessage = {
-            type: "HANDSHAKE",
-            deviceId: device.id,
-            deviceName: this.plugin.settings.deviceName ?? device.id,
-            publicKey: device.publicKey,
-            fingerprint: device.fingerprint,
-            signature: Array.from(new Uint8Array(signature))
-        };
-
-        this.sendMessage(deviceId, handshake);
-    }
-
-    private async handleHandshake(msg: HandshakeMessage): Promise<void> {
-        console.warn("HANDSHAKE RECEIVED:", msg.deviceId);
-
-        let accepted = false;
-
-        try {
-            // validate incoming public key format
-            if (!msg.publicKey) {
-                new Notice("Unsuccessful: Publickey Missing.");
-            }
-
-            // convert base64 jwk string back to object
-            const jwk: JsonWebKey = JSON.parse(atob(msg.publicKey));
-
-            // import remote signing key
-            const remotePublicKey: CryptoKey = await crypto.subtle.importKey(
-                "jwk",
-                jwk,
-                { name: "ECDSA", namedCurve: "P-256" },
-                true,
-                ["verify"]
-            );
-
-            // verify against fingerprint (consistent identity proof)
-            const encoder = new TextEncoder();
-            const data: ArrayBuffer = encoder.encode(msg.fingerprint).buffer;
-
-            const signature: ArrayBuffer = new Uint8Array(msg.signature).buffer;
-
-            accepted = await this.verifySignature(
-                remotePublicKey,
-                data,
-                signature
-            );
-
-            if (accepted) {
-                await this.plugin.deviceManager.trustDevice(
-                    msg.deviceId,
-                    msg.deviceName ?? msg.deviceId,
-                    msg.publicKey
-                );
-
-                await this.plugin.deviceManager.updateLastSeen(msg.deviceId);
-            } else {
-                console.warn("handshake signature invalid:", msg.deviceId);
-            }
-
-        } catch (err) {
-            console.error("error verifying handshake:", err);
-        }
-
-        // send acknowledgement
-        const ack: HandshakeAckMessage = {
-            type: "HANDSHAKE_ACK",
-            accepted
-        };
-
-        this.sendMessage(msg.deviceId, ack);
-    }
-
-    public async performHandshake(remoteDeviceId: string): Promise<boolean> {
-        const remoteDevice: Device | undefined =
-            this.plugin.findDevice(remoteDeviceId);
-
-        if (!remoteDevice) {
-            console.warn(`Handshake failed: device ${remoteDeviceId} not found`);
-            return false;
-        }
-
-        const connection = new RTCPeerConnection();
-        const channel = connection.createDataChannel("handshake");
-
-        const remote: RemoteDevice = {
-            device: remoteDevice,
-            connection,
-            channel,
-        };
-
-        this.remoteDevices.set(remoteDeviceId, remote);
-
-        try {
-            channel.onopen = async () => {
-                const payload = new TextEncoder().encode(
-                    this.plugin.settings.thisDevice.fingerprint
-                );
-
-                const signature = await FloppyDiskCrypto.signData(
-                    this.plugin.settings.thisDevice.signingKeyPair.privateKey,
-                    payload.buffer
-                );
-
-                const handshakeMsg = {
-                    type: "HANDSHAKE",
-                    deviceId: this.plugin.settings.thisDevice.id,
-                    deviceName: this.plugin.settings.thisDevice.name,
-                    fingerprint: this.plugin.settings.thisDevice.fingerprint,
-                    signature: Array.from(new Uint8Array(signature)),
-                    publicKey: this.plugin.settings.thisDevice.publicKey,
-                };
-
-                channel.send(JSON.stringify(handshakeMsg));
-            };
-
-            const handshakeConfirmed = await new Promise<boolean>((resolve) => {
-                channel.onmessage = (ev: MessageEvent) => {
-                    try {
-                        if (typeof ev.data !== "string") return;
-
-                        const data = JSON.parse(ev.data);
-
-                        if (
-                            data?.type === "HANDSHAKE_ACK" &&
-                            data?.accepted === true
-                        ) {
-                            resolve(true);
-                        }
-                    } catch {
-                        resolve(false);
-                    }
-                };
-
-                setTimeout(() => resolve(false), 10000);
-            });
-
-            if (!handshakeConfirmed) {
-                this.remoteDevices.delete(remoteDeviceId);
-                connection.close();
-            }
-
-            return handshakeConfirmed;
-
-        } catch (err) {
-            console.error("Handshake error:", err);
-            this.remoteDevices.delete(remoteDeviceId);
-            connection.close();
-            return false;
-        }
-    }
-
-    public async createPairingOffer(): Promise<string> {
-        const connection = new RTCPeerConnection();
-
-        connection.createDataChannel("pairing");
-
-        const sessionId = crypto.randomUUID();
-
-        this.pairingSessions.set(sessionId, connection);
-
-        const offer = await connection.createOffer();
-        await connection.setLocalDescription(offer);
-
-        const device = this.plugin.settings.thisDevice;
-
-        const message: PairingOfferMessage = {
-            type: "PAIR_OFFER",
-            sessionId,
-            deviceId: device.id,
-            deviceName: this.plugin.settings.deviceName ?? device.id,
-            publicKey: device.publicKey,
-            fingerprint: device.fingerprint,
-            offer: {
-                type: offer.type,
-                sdp: offer.sdp ?? "",
-            },
-        };
-
-        return JSON.stringify(message);
-    }
-
-    public async acceptPairingOffer(
-        offerMsg: PairingOfferMessage
-    ): Promise<string> {
-        const connection = new RTCPeerConnection();
-
-        const offer: RTCSessionDescriptionInit = {
-            type: offerMsg.offer.type,
-            sdp: offerMsg.offer.sdp,
-        };
-
-        await connection.setRemoteDescription(offer);
-
-        const answer = await connection.createAnswer();
-        await connection.setLocalDescription(answer);
-
-        this.pairingSessions.set(offerMsg.sessionId, connection);
-
-        // Trust the device that sent the offer
-        await this.plugin.deviceManager.trustDevice(
-            offerMsg.deviceId,
-            offerMsg.deviceName ?? offerMsg.deviceId,
-            offerMsg.publicKey
-        );
-
-        const device = this.plugin.settings.thisDevice;
-
-        const answerMessage: PairingAnswerMessage = {
-            type: "PAIR_ANSWER",
-            sessionId: offerMsg.sessionId,
-            deviceId: device.id,
-            deviceName: this.plugin.settings.deviceName ?? device.id,
-            publicKey: device.publicKey,
-            fingerprint: device.fingerprint,
-            answer: {
-                type: answer.type,
-                sdp: answer.sdp ?? "",
-            },
-        };
-
-        return JSON.stringify(answerMessage);
-    }
-
-    public async completePairing(
-        answerMsg: PairingAnswerMessage
-    ): Promise<void> {
-        const connection = this.pairingSessions.get(answerMsg.sessionId);
-
-        if (!connection) {
-            console.warn("Pairing session not found:", answerMsg.sessionId);
-            return;
-        }
-
-        const answer: RTCSessionDescriptionInit = {
-            type: answerMsg.answer.type,
-            sdp: answerMsg.answer.sdp,
-        };
-
-        await connection.setRemoteDescription(answer);
-
-        // Trust the answering device
-        await this.plugin.deviceManager.trustDevice(
-            answerMsg.deviceId,
-            answerMsg.deviceName ?? answerMsg.deviceId,
-            answerMsg.publicKey
-        );
-    }
-
-    // verify a signature given public key and data
-    private async verifySignature(
-        publicKey: CryptoKey,
-        data: ArrayBuffer,
-        signature: ArrayBuffer
-    ): Promise<boolean> {
-        return crypto.subtle.verify(
-            { name: "ECDSA", hash: "SHA-256" },
-            publicKey,
-            signature,
-            data
-        )
-    }
-
-    public getRemoteDevices(): Map<string, RemoteDevice> {
-        return this.remoteDevices
-    }
-
-    public async sendFileInChunks(deviceId: string, path: string) {
-        const file = this.plugin.app.vault.getAbstractFileByPath(path)
-        if (!(file instanceof TFile)) return
-
-        const buffer = await this.plugin.app.vault.readBinary(file)
-        let offset = 0
-        let chunkIndex = 0
-        const totalChunks = Math.ceil(buffer.byteLength / CHUNK_SIZE)
-
-        while (offset < buffer.byteLength) {
-            const chunk = buffer.slice(offset, offset + CHUNK_SIZE)
-            const msg: FileChunkMessage = {
-                type: "FILE_CHUNK",
-                path,
-                chunkIndex,
-                totalChunks,
-                data: chunk
-            }
-            this.sendMessage(deviceId, msg)
-            offset += CHUNK_SIZE
-            chunkIndex++
-        }
-
-        // notify completion
-        const completeMsg: FileCompleteMessage = { type: "FILE_COMPLETE", path }
-        this.sendMessage(deviceId, completeMsg)
-    }
-
-    // request a file from a remote device and assemble chunks
-    public async requestFile(deviceId: string, path: string): Promise<Uint8Array> {
-        const channel = this.channels[deviceId];
-        if (!channel || channel.readyState !== "open") {
-            throw new Error(`No open channel to device ${deviceId}`);
-        }
-
-        // clear previous buffer if exists
-        this.fileBuffers[path] = [];
-
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                delete this.fileBuffers[path];
-                reject(new Error(`File request timed out: ${path}`));
-            }, 10000); // 10s timeout
-
-            const handleMessage = (event: MessageEvent<string | ArrayBuffer>) => {
-                if (!this.fileBuffers[path]) return;
-
-                if (event.data instanceof ArrayBuffer) {
-                    // raw chunk received
-                    this.fileBuffers[path].push(new Uint8Array(event.data));
-                } else if (typeof event.data === "string") {
-                    let parsed: unknown;
-                    try {
-                        parsed = JSON.parse(event.data);
-                    } catch {
-                        return;
-                    }
-
-                    if (isFileChunkMessage(parsed) && parsed.path === path) {
-                        this.fileBuffers[path][parsed.chunkIndex] = new Uint8Array(parsed.data);
-                    } else if (isFileCompleteMessage(parsed) && parsed.path === path) {
-                        // assemble chunks
-                        const buffers = this.fileBuffers[path];
-                        const totalLength = buffers.reduce((sum, chunk) => sum + chunk.length, 0);
-                        const fullBuffer = new Uint8Array(totalLength);
-                        let offset = 0;
-                        for (const chunk of buffers) {
-                            fullBuffer.set(chunk, offset);
-                            offset += chunk.length;
-                        }
-
-                        // cleanup
-                        delete this.fileBuffers[path];
-                        channel.removeEventListener("message", handleMessage);
-                        clearTimeout(timeout);
-
-                        resolve(fullBuffer);
-                    }
-                }
-            };
-
-            channel.addEventListener("message", handleMessage);
-
-            // send file request
-            const requestMsg = { type: "FILE_REQUEST", path } as const;
-            channel.send(JSON.stringify(requestMsg));
-        });
-    }
-
-
-    // handle received file chunk
-    private async handleFileChunk(msg: FileChunkMessage) {
-        if (!this.fileBuffers[msg.path]) this.fileBuffers[msg.path] = []
-        const bufferArray = this.fileBuffers[msg.path]!
-        bufferArray[msg.chunkIndex] = new Uint8Array(msg.data)
-    }
-
-    // assemble file after chunks received
-    private async assembleFile(path: string): Promise<void> {
-        const buffers = this.fileBuffers[path]
-        if (!buffers) return
-
-        // combine chunks
-        const totalLength = buffers.reduce((sum, chunk) => sum + chunk.length, 0)
-        const fullBuffer = new Uint8Array(totalLength)
-        let offset = 0
-        for (const chunk of buffers) {
-            fullBuffer.set(chunk, offset)
-            offset += chunk.length
-        }
-
-        // remove chunks
-        delete this.fileBuffers[path]
-
-        // text or binary file
-        const file = this.plugin.app.vault.getAbstractFileByPath(path)
-
-        if (file instanceof TFile) {
-            if (isTextFile(path)) {
-                const decoder = new TextDecoder()
-                const content = decoder.decode(fullBuffer)
-                await this.plugin.app.vault.modify(file, content)
-            } else {
-                await this.plugin.app.vault.adapter.writeBinary(path, fullBuffer.buffer)
-            }
-        } else {
-            if (isTextFile(path)) {
-                const decoder = new TextDecoder()
-                const content = decoder.decode(fullBuffer)
-                await this.plugin.app.vault.create(path, content)
-            } else {
-                await this.plugin.app.vault.adapter.writeBinary(path, fullBuffer.buffer)
-            }
-        }
-
-
-        // update snapshot
-        if (this.plugin.snapshotManager) {
-            const hash = await FloppyDiskCrypto.computeHash(fullBuffer.buffer)
-            await this.plugin.snapshotManager.updateFileSync(path, hash)
-        }
-    }
+	private plugin: FloppyDiskPlugin;
+	private connections: Map<string, ConnectionEntry> = new Map();
+	private pendingConnections = new Map<
+		string,
+		{
+			resolve: () => void;
+			reject: (err: any) => void;
+		}
+	>();
+	private readyConnections = new Set<string>();
+	private fileBuffers: Map<string, Uint8Array[]> = new Map();
+	private fileChunkTotals = new Map<string, number>();
+	private pendingManifestResolvers: Map<
+		string,
+		(manifest: Manifest) => void
+	> = new Map();
+
+	constructor(plugin: FloppyDiskPlugin) {
+		this.plugin = plugin;
+	}
+
+	private updateUI() {
+		this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
+	};
+
+	private resolveDeviceId(id: string): string {
+		const trusted = this.plugin.deviceManager.getTrustedDevices();
+
+		const match = trusted.find(d => d.id === id);
+
+		if (match) return match.id;
+
+		console.warn("Unknown device id used in WebRTC:", id);
+		return id;
+	}
+
+	// connect
+	private createPeer(id: string, isInitiator: boolean): RTCPeerConnection {
+		const peer = new RTCPeerConnection({
+			iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+		});
+
+		if (isInitiator) {
+			const channel = peer.createDataChannel("floppy-disk");
+			this.attachConnection(id, peer, channel);
+		} else {
+			peer.ondatachannel = (event) => {
+				this.attachConnection(id, peer, event.channel);
+			};
+		}
+
+		return peer;
+	}
+
+	public async createOffer(id: string): Promise<string> {
+		const peer = this.createPeer(id, true);
+
+		const offer = await peer.createOffer();
+		await peer.setLocalDescription(offer);
+
+		await this.waitForIceGathering(peer);
+
+		return JSON.stringify(peer.localDescription);
+	}
+
+	public async acceptOffer(id: string, offerString: string): Promise<string> {
+		const peer = this.createPeer(id, false);
+
+		const offer = JSON.parse(offerString);
+
+		await peer.setRemoteDescription(offer);
+
+		const answer = await peer.createAnswer();
+		await peer.setLocalDescription(answer);
+
+		await this.waitForIceGathering(peer);
+
+		return JSON.stringify(peer.localDescription);
+	}
+
+	public async finalizeConnection(id: string, answerString: string) {
+		const entry = this.connections.get(id);
+		if (!entry) throw new Error("Peer not found");
+
+		const answer = JSON.parse(answerString);
+
+		// apply remote answer first
+		await entry.peer.setRemoteDescription(answer);
+
+		// mark connection as established (your new logic)
+		this.pendingConnections.get(id)?.resolve();
+		this.pendingConnections.delete(id);
+	}
+
+	private waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
+		return new Promise((resolve) => {
+			if (peer.iceGatheringState === "complete") {
+				resolve();
+				return;
+			}
+
+			peer.onicegatheringstatechange = () => {
+				if (peer.iceGatheringState === "complete") {
+					resolve();
+				}
+			};
+		});
+	}
+
+	private getIdByChannel(channel: RTCDataChannel): string | undefined {
+		for (const [id, conn] of this.connections.entries()) {
+			if (conn.channel === channel) {
+				return id;
+			}
+		}
+		return undefined;
+	}
+
+	public isConnected(id: string): boolean {
+		const entry = this.connections.get(id);
+		if (!entry) return false;
+
+		console.log("MAP STATE KEYS:", Array.from(this.connections.keys()));
+
+		const peer = entry.peer;
+		const channel = entry.channel;
+
+		console.log("CHECK CONNECTION:", id, {
+			connectionState: peer.connectionState,
+			iceState: peer.iceConnectionState,
+			channel: channel.readyState
+		});
+
+		return channel.readyState === "open";
+	}
+
+	public async connectToDevice(id: string): Promise<string> {
+		const trusted = this.plugin.deviceManager.getTrustedDevices();
+		if (!trusted.find(d => d.id === id)) {
+			throw new Error("Attempting to connect to unknown device");
+		}
+
+		if (this.connections.has(id)) {
+			console.warn("Already have connection for", id);
+			return "";
+		}
+
+		const peer = new RTCPeerConnection({
+			iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+		});
+
+		const channel = peer.createDataChannel("floppy-disk");
+
+		this.attachConnection(id, peer, channel);
+
+		const offer = await peer.createOffer();
+		await peer.setLocalDescription(offer);
+
+		await this.waitForIceGathering(peer);
+
+		return JSON.stringify(peer.localDescription);
+	}
+
+	private attachConnection(
+		id: string,
+		peer: RTCPeerConnection,
+		channel: RTCDataChannel,
+	) {
+		console.log("ATTACH:", id, { peer, channel });
+
+		// handles reconnects
+		this.connections.set(id, { peer, channel });
+
+		peer.onconnectionstatechange = () => {
+			const state = peer.connectionState;
+			console.log(`[RTC] onconnectionstatechange: ${id} | ${state}`);
+
+			if (
+				state === "failed" ||
+				state === "disconnected" ||
+				state === "closed"
+			) {
+				this.connections.delete(id);
+				this.readyConnections.delete(id);
+			}
+
+			this.updateUI();
+		};
+
+		channel.onopen = () => {
+			console.log("[RTC] CHANNEL OPEN:", id);
+
+			this.updateUI();
+
+			// start identity verification
+			this.startHandshake(id);
+		};
+
+		channel.onclose = () => {
+			console.log("[RTC] CHANNEL CLOSED:", id);
+
+			this.connections.delete(id);
+			this.readyConnections.delete(id); // keep state consistent
+
+			this.updateUI();
+		};
+
+		channel.onmessage = (event) => {
+			const realId = this.getIdByChannel(channel);
+
+			if (!realId) {
+				console.warn("[RTC] Unknown channel for message");
+				return;
+			}
+
+			this.handleMessage(realId, event.data);
+		};
+	}
+
+	// messaging
+	public sendMessage(id: string, msg: Message) {
+		const entry = this.connections.get(id);
+		if (!entry || entry.channel.readyState !== "open") return;
+
+		entry.channel.send(JSON.stringify(msg));
+	}
+
+	private async handleMessage(id: string, data: string | ArrayBuffer) {
+		if (typeof data !== "string") return;
+
+		let msg: Message;
+
+		try {
+			msg = JSON.parse(data);
+		} catch {
+			return;
+		}
+
+		switch (msg.type) {
+			case "REQUEST_MANIFEST":
+				await this.sendManifest(id);
+				break;
+
+			case "MANIFEST_RESPONSE":
+				console.log(`[SYNC] MANIFEST RECIEVED: ${id}`);
+				this.pendingManifestResolvers.get(id)?.(msg.payload);
+
+				this.pendingManifestResolvers.delete(id);
+				break;
+
+			case "FILE_REQUEST":
+				if (typeof msg.path === "string") {
+					await this.sendFileInChunks(id, msg.path);
+				}
+				break;
+			case "FILE_CHUNK":
+				await this.handleFileChunk(msg);
+				break;
+
+			case "FILE_COMPLETE":
+				await this.assembleFile(msg.path);
+				break;
+
+			case "HANDSHAKE":
+				console.log(`[RTC] HANDSHAKE RECEIVED ${id}`)
+				await this.handleHandshake(msg);
+				break;
+
+			case "HANDSHAKE_ACK":
+				console.log(`[RTC] HANDSHAKE ACK: ${id} accepted: ${msg.accepted}`);
+
+				console.log("[DEBUG] READY SET:", {
+					idFromChannel: id,
+					readyConnections: Array.from(this.readyConnections),
+					allConnections: Array.from(this.connections.keys())
+				});
+
+				if (msg.accepted) {
+					// mark connection as ready for sync
+					this.readyConnections.add(id);
+
+					console.log(`[RTC] Connection READY: ${id}`);
+					this.updateUI();
+				}
+
+				break;
+		}
+	}
+
+	// handshaking
+	public async startHandshake(id: string) {
+		console.log(`[RTC] SENDING HANDSHAKE: ${id}`);
+		const device = this.plugin.settings.thisDevice;
+
+		const payload = new TextEncoder().encode(device.fingerprint);
+
+		const privateKey = await FloppyDiskCrypto.importSigningPrivateKey(
+			device.signingKeyPair.privateKeyJwk,
+		);
+
+		const signature = await FloppyDiskCrypto.signData(
+			privateKey,
+			payload.buffer,
+		);
+
+		const handshake: HandshakeMessage = {
+			type: "HANDSHAKE",
+			deviceId: device.id,
+			deviceName: device.name,
+			publicKey: device.publicKey,
+			fingerprint: device.fingerprint,
+			signature: Array.from(new Uint8Array(signature)),
+		};
+
+		this.sendMessage(id, handshake);
+	}
+
+	private async handleHandshake(msg: HandshakeMessage) {
+		let accepted = false;
+
+		try {
+			const jwk: JsonWebKey = JSON.parse(msg.publicKey);
+
+			const publicKey =
+				await FloppyDiskCrypto.importSigningPublicKey(jwk);
+
+			const encoder = new TextEncoder();
+			const data = encoder.encode(msg.fingerprint).buffer;
+			const signature = new Uint8Array(msg.signature).buffer;
+
+			accepted = await FloppyDiskCrypto.verifySignature(
+				publicKey,
+				signature,
+				data,
+			);
+
+			if (accepted) {
+				console.log(`[RTC] HANDSHAKE VERIFIED: ${msg.deviceId}`);
+
+				// find the connection that received this handshake
+				const entry = [...this.connections.entries()]
+					.find(([_, conn]) => conn.channel.readyState === "open");
+
+				if (!entry) {
+					console.warn("No active connection for handshake");
+					return;
+				}
+
+				const [oldId, conn] = entry;
+
+				// if already correct, skip
+				if (oldId !== msg.deviceId) {
+					console.log(`[RTC] REBIND ${oldId} → ${msg.deviceId}`);
+
+					this.connections.delete(oldId);
+					this.connections.set(msg.deviceId, conn);
+
+					this.readyConnections.delete(oldId);
+				}
+
+				this.readyConnections.add(msg.deviceId);
+
+				this.updateUI();
+				console.log("CONNECTIONS AFTER HANDSHAKE:", Array.from(this.connections.keys()));
+			}
+		} catch (err) {
+			console.error("Handshake error:", err);
+		}
+
+		this.sendMessage(msg.deviceId, {
+			type: "HANDSHAKE_ACK",
+			accepted,
+		});
+	}
+
+	private async sendManifest(id: string) {
+		const manifest = await generateManifest(
+			this.plugin.app,
+			this.plugin.app.vault.getName(),
+			this.plugin.settings.thisDevice.id,
+		);
+
+		const msg: ManifestResponseMessage = {
+			type: "MANIFEST_RESPONSE",
+			payload: manifest,
+		};
+
+		this.sendMessage(id, msg);
+	}
+
+	public async generateLocalManifest(): Promise<Manifest> {
+		if (!this.plugin.snapshotManager) {
+			throw new Error("WebRTCManager: snapshotManager not initialized");
+		}
+
+		// Device ID should come from plugin settings (single source of truth)
+		const id: string = this.plugin.settings.thisDevice.id;
+
+		if (!id) {
+			throw new Error("Current device ID is missing in settings");
+		}
+
+		const vaultId: string = this.plugin.app.vault.getName();
+
+		return generateManifest(this.plugin.app, vaultId, id);
+	}
+
+	public async requestRemoteManifest(id: string): Promise<Manifest> {
+		console.log(`[SYNC] REQUESTING MANIFEST: ${id}`);
+		return new Promise((resolve, reject) => {
+			if (!this.connections.has(id)) {
+				return reject(new Error("Device not connected"));
+			}
+
+			this.pendingManifestResolvers.set(id, resolve);
+
+			if (!this.connections.has(id)) {
+				throw new Error("Device not connected");
+			}
+
+			if (!this.readyConnections.has(id)) {
+				throw new Error("Device not handshake-ready");
+			}
+			this.sendMessage(id, {
+				type: "REQUEST_MANIFEST",
+			});
+
+			setTimeout(() => {
+				if (this.pendingManifestResolvers.has(id)) {
+					this.pendingManifestResolvers.delete(id);
+					reject(new Error("Manifest request timeout"));
+				}
+			}, 10000);
+		});
+	}
+
+	//  file transfer
+	public async sendFileInChunks(id: string, path: string) {
+		const file = this.plugin.app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile)) return;
+
+		const buffer = await this.plugin.app.vault.readBinary(file);
+
+		let offset = 0;
+		let index = 0;
+
+		while (offset < buffer.byteLength) {
+			const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
+
+			const chunkBase64 = btoa(
+				String.fromCharCode(...new Uint8Array(chunk)),
+			);
+
+			this.sendMessage(id, {
+				type: "FILE_CHUNK",
+				path,
+				chunkIndex: index,
+				totalChunks: Math.ceil(buffer.byteLength / CHUNK_SIZE),
+				data: chunkBase64,
+			});
+
+			offset += CHUNK_SIZE;
+			index++;
+		}
+
+		this.sendMessage(id, {
+			type: "FILE_COMPLETE",
+			path,
+		});
+	}
+
+	private async handleFileChunk(msg: FileChunkMessage) {
+		if (!this.fileBuffers.has(msg.path)) {
+			this.fileBuffers.set(msg.path, []);
+			this.fileChunkTotals.set(msg.path, msg.totalChunks);
+		}
+
+		const buffers = this.fileBuffers.get(msg.path)!;
+
+		const binaryString = atob(msg.data);
+		const bytes = new Uint8Array(binaryString.length);
+
+		for (let i = 0; i < binaryString.length; i++) {
+			bytes[i] = binaryString.charCodeAt(i);
+		}
+
+		buffers[msg.chunkIndex] = bytes;
+	}
+
+	private async assembleFile(path: string) {
+		const buffers = this.fileBuffers.get(path);
+		const total = this.fileChunkTotals.get(path);
+
+		if (!buffers || total === undefined) return;
+
+		if (buffers.filter(Boolean).length !== total) {
+			console.warn("Missing chunks for", path);
+			return;
+		}
+
+		const totalLength = buffers.reduce(
+			(sum, chunk) => sum + chunk.length,
+			0,
+		);
+
+		const fullBuffer = new Uint8Array(totalLength);
+
+		let offset = 0;
+		for (const chunk of buffers) {
+			fullBuffer.set(chunk, offset);
+			offset += chunk.length;
+		}
+
+		if (isTextFile(path)) {
+			const content = new TextDecoder().decode(fullBuffer);
+
+			const file = this.plugin.app.vault.getAbstractFileByPath(path);
+
+			if (file instanceof TFile) {
+				await this.plugin.app.vault.modify(file, content);
+			} else {
+				await this.plugin.app.vault.create(path, content);
+			}
+		} else {
+			await this.plugin.app.vault.adapter.writeBinary(path, fullBuffer);
+		}
+
+		const hash = await FloppyDiskCrypto.computeHash(fullBuffer.buffer);
+
+		await this.plugin.snapshotManager.updateFileSync(path, hash);
+
+		this.fileBuffers.delete(path);
+		this.fileChunkTotals.delete(path);
+	}
+
+	public async reconnectAllDevices(): Promise<void> {
+		const devices = this.plugin.deviceManager.getTrustedDevices();
+
+		for (const device of devices) {
+			if (this.isConnected(device.id)) continue;
+
+			console.warn("Attempting connection to", device.id);
+
+			try {
+				await this.connectToDevice(device.id);
+			} catch (e) {
+				console.warn("Failed to connect:", device.id, e);
+			}
+		}
+	}
+
+	public getConnections(): string[] {
+		return Array.from(this.connections.keys());
+	}
+
+	// request a file from a remote device and assemble chunks
+	public async requestFile(id: string, path: string): Promise<Uint8Array> {
+		const channel = this.connections.get(id)?.channel;
+
+		if (!channel || channel.readyState !== "open") {
+			throw new Error(`No open channel to device ${id}`);
+		}
+
+		// initialize buffer in Map
+		this.fileBuffers.set(path, []);
+
+		return new Promise((resolve, reject) => {
+			const timeout = setTimeout(() => {
+				this.fileBuffers.delete(path);
+				reject(new Error(`File request timed out: ${path}`));
+			}, 10000);
+
+			const handleMessage = (event: MessageEvent) => {
+				if (!this.fileBuffers.has(path)) return;
+
+				if (typeof event.data === "string") {
+					let parsed: unknown;
+
+					try {
+						parsed = JSON.parse(event.data);
+					} catch {
+						return;
+					}
+
+					if (isFileChunkMessage(parsed) && parsed.path === path) {
+						const buffers = this.fileBuffers.get(path)!;
+
+						buffers[parsed.chunkIndex] = new Uint8Array(
+							parsed.data,
+						);
+					} else if (
+						isFileCompleteMessage(parsed) &&
+						parsed.path === path
+					) {
+						const buffers = this.fileBuffers.get(path);
+
+						if (!buffers) return;
+
+						const totalLength = buffers.reduce(
+							(sum, chunk) => sum + chunk.length,
+							0,
+						);
+
+						const fullBuffer = new Uint8Array(totalLength);
+
+						let offset = 0;
+						for (const chunk of buffers) {
+							if (!chunk) continue;
+							fullBuffer.set(chunk, offset);
+							offset += chunk.length;
+						}
+
+						// cleanup
+						this.fileBuffers.delete(path);
+						channel.removeEventListener("message", handleMessage);
+						clearTimeout(timeout);
+
+						resolve(fullBuffer);
+					}
+				}
+			};
+
+			channel.addEventListener("message", handleMessage);
+
+			// Send request
+			channel.send(
+				JSON.stringify({
+					type: "FILE_REQUEST",
+					path,
+				}),
+			);
+		});
+	}
 }

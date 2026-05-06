@@ -1,5 +1,7 @@
 import FloppyDiskPlugin from "../main";
-import { SyncView } from "ui/SyncView";
+
+import { SyncView } from "../ui/SyncView";
+
 
 export function registerSyncCommands(plugin: FloppyDiskPlugin): void {
     plugin.addCommand({

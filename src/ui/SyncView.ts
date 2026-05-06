@@ -1,14 +1,12 @@
-import {
-  App,
-  ItemView,
-  WorkspaceLeaf,
-  Setting,
-  Notice
-} from "obsidian"
+import { App, ItemView, WorkspaceLeaf, Setting, Notice, Events } from "obsidian";
 
-import FloppyDiskPlugin from "main"
-import { FileConflict, SyncProgress } from "types/sync"
-import { Device } from "types/device"
+import { FileConflict, SyncProgress } from "../types/sync";
+import { Device } from "../types/device";
+
+import FloppyDiskPlugin from "../main";
+
+import { CONNECTION_CHANGED_EVENT } from "../utils/events";
+
 
 export const SYNC_VIEW_TYPE = "floppy-disk-sync-view"
 
@@ -28,6 +26,13 @@ export class SyncView extends ItemView {
   getIcon(): string { return "refresh-cw" }
 
   async onOpen(): Promise<void> {
+    this.registerEvent(
+      (this.app.workspace as unknown as Events).on(
+        CONNECTION_CHANGED_EVENT,
+        () => this.render()
+      )
+    );
+
     this.render()
   }
 
@@ -40,12 +45,20 @@ export class SyncView extends ItemView {
   }
 
   private renderDevicesSection(contentEl: HTMLElement): void {
-
     new Setting(contentEl).setName("Devices").setHeading()
+      .setDesc("Refresh device connections")
+      .addButton(btn =>
+        btn
+          .setButtonText("Refresh")
+          .onClick(async () => {
+            new Notice("Reconnect not supported. Re-pair to reconnect.");
+            // new Notice("Refreshing connections...");
+            // await this.plugin.webrtcManager.reconnectAllDevices();
+            // this.render();
+          })
+      );
 
     const devicesContainer = contentEl.createDiv()
-    const remoteDevices = this.plugin.remoteDevices
-
     const devices: Device[] = this.plugin.deviceManager.getTrustedDevices()
 
     if (!devices) {
@@ -53,14 +66,13 @@ export class SyncView extends ItemView {
       return
     }
 
+    console.log("UI DEVICE IDS:", devices.map(d => d.id));
+    console.log("CONNECTED IDS:", this.plugin.webrtcManager.getConnections());
+
     devices.forEach((device: Device) => {
 
-      const remote = remoteDevices.get(device.id)
-
-      const connectionStatus =
-        remote?.connection?.connectionState === "connected"
-          ? "Online"
-          : "Offline"
+      console.log(`[DEVICE STATUS] ${device.id}: ${this.plugin.webrtcManager.isConnected(device.id)}`)
+      const connectionStatus = this.plugin.webrtcManager.isConnected(device.id) ? "Online" : "Offline";
 
       if (!this.selectedDeviceId) {
         this.selectedDeviceId = device.id
@@ -90,12 +102,18 @@ export class SyncView extends ItemView {
       setting.addButton(button => {
         button
           .setButtonText(isSyncing ? "Pause" : "Sync")
-          .onClick(() => {
+          .onClick(async () => {
 
             if (isSyncing) {
+              console.warn("Pausing...")
               this.plugin.syncManager.pauseDeviceSync(device.id)
             } else {
-              this.plugin.syncManager.resumeDeviceSync(device.id)
+              if (!this.plugin.webrtcManager.isConnected(device.id)) {
+                new Notice("Device not connected");
+                return;
+              }
+              console.warn("Resuming...")
+              await this.plugin.syncManager.startDeviceSync(device.id)
             }
 
             this.render()

@@ -1,10 +1,8 @@
-import { Device, ThisDevice } from "types/device";
+import { Device, ThisDevice } from "../types/device";
 
 export interface FloppyDiskSettings {
   devices: Record<string, Device>;
   vaultId: string;
-  deviceId: string;
-  deviceName?: string;
   thisDevice: ThisDevice;
   hostModeEnabled: boolean;
   maxBackupsPerFile: number;

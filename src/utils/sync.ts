@@ -81,11 +81,24 @@ export function createSyncPlan(
 			if (local.hash === remote.hash) continue;
 
 			const baseHash = base?.lastSyncedHash;
+			const baseDevice = base?.lastSyncedBy;
+			const currentDevice = snapshot.currentDeviceId;
 
-			// new or unknown file state
+			const cameFromRemoteDevice =
+				baseDevice && baseDevice !== currentDevice;
+
+			// new file or unknown state
 			if (!baseHash) {
-				// deterministic winner prevents ping-pong
-				// (same rule on all devices)
+				// prevent swap/ping-pong when remote-originated
+				if (cameFromRemoteDevice) {
+					downloads.push({
+						path: remote.path,
+						action: "download",
+						remoteHash: remote.hash,
+						fileId,
+					});
+					continue;
+				}
 
 				const localWins = local.fileId > remote.fileId;
 
@@ -108,8 +121,12 @@ export function createSyncPlan(
 				continue;
 			}
 
+			// directional-aware change detection
 			const localChanged = local.hash !== baseHash;
-			const remoteChanged = remote.hash !== baseHash;
+
+			const remoteChanged =
+				remote.hash !== baseHash &&
+				baseDevice !== currentDevice;
 
 			if (localChanged && remoteChanged) {
 				conflicts.push({

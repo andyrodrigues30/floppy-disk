@@ -34,10 +34,29 @@ export class SnapshotManager {
 
 		let changed = false;
 
+		if (!snapshot.pathIndex) snapshot.pathIndex = {};
+
 		for (const file of files) {
-			if (!snapshot.files[file.path]) {
-				snapshot.files[file.path] = {
-					fileId: crypto.randomUUID(),
+			let fileId = snapshot.pathIndex[file.path];
+
+			if (!fileId) {
+				fileId = crypto.randomUUID();
+				snapshot.pathIndex[file.path] = fileId;
+
+				snapshot.files[fileId] = {
+					fileId,
+					lastSyncedHash: "",
+					lastSyncedTimestamp: 0,
+					lastSyncedBy: ""
+				};
+
+				changed = true;
+			}
+
+			// ensure reverse consistency
+			if (!snapshot.files[fileId]) {
+				snapshot.files[fileId] = {
+					fileId,
 					lastSyncedHash: "",
 					lastSyncedTimestamp: 0,
 					lastSyncedBy: ""
@@ -196,8 +215,14 @@ export class SnapshotManager {
 		const deviceId = snapshot.currentDeviceId;
 		const now = Date.now();
 
-		// get fileId from pathIndex (NEW REQUIRED STRUCTURE)
-		const fileId = snapshot.pathIndex?.[filePath] ?? crypto.randomUUID();
+		// get file id
+		const fileId = snapshot.pathIndex?.[filePath];
+
+		if (!fileId) {
+			throw new Error(
+				`Missing fileId for ${filePath}. Snapshot out of sync. Run ensureFileIdsExist() BEFORE sync.`
+			);
+		}
 
 		// ensure pathIndex exists
 		if (!snapshot.pathIndex) snapshot.pathIndex = {};

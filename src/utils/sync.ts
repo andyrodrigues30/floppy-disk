@@ -1,7 +1,7 @@
 import { App, Notice, TFile } from "obsidian";
 
-import { Manifest } from "../types/manifest";
-import { Snapshot } from "../types/snapshot";
+import { Manifest, ManifestFileEntry } from "../types/manifest";
+import { FileSnapshot, Snapshot } from "../types/snapshot";
 import {
 	FileConflict,
 	RenameAction,
@@ -13,12 +13,6 @@ import { WebRTCManager } from "../managers/WebRTCManager";
 import { SnapshotManager } from "../managers/SnapshotManager";
 import { FloppyDiskCrypto } from "./cryptoHelper";
 import { isTextFile } from "./isTextFile";
-
-type ManifestEntry = {
-	fileId: string;
-	path: string;
-	hash: string;
-};
 
 export function createSyncPlan(
 	localManifest: Manifest,
@@ -35,10 +29,10 @@ export function createSyncPlan(
 	const remoteFiles = remoteManifest.files;
 	const baseFiles = snapshot.files || {};
 
-	// build fileId maps
-	const localById = new Map<string, ManifestEntry>();
-	const remoteById = new Map<string, ManifestEntry>();
-	const baseById = new Map<string, any>();
+	// Build maps by fileId
+	const localById = new Map<string, ManifestFileEntry>();
+	const remoteById = new Map<string, ManifestFileEntry>();
+	const baseById = new Map<string, FileSnapshot>();
 
 	for (const entry of Object.values(localFiles)) {
 		localById.set(entry.fileId, entry);
@@ -49,9 +43,7 @@ export function createSyncPlan(
 	}
 
 	for (const entry of Object.values(baseFiles)) {
-		if (entry.fileId) {
-			baseById.set(entry.fileId, entry);
-		}
+		baseById.set(entry.fileId, entry);
 	}
 
 	const allFileIds = new Set<string>([
@@ -64,70 +56,43 @@ export function createSyncPlan(
 		const remote = remoteById.get(fileId);
 		const base = baseById.get(fileId);
 
-		// renames - run first
+		// renames
 		if (local && remote && local.path !== remote.path) {
 			renames.push({
 				fileId,
 				oldPath: remote.path,
 				newPath: local.path,
 			});
-
 			continue;
 		}
 
-		// both sides exist
+		// both exist
 		if (local && remote) {
-			// identical content - skip
+			// already identical
 			if (local.hash === remote.hash) continue;
 
 			const baseHash = base?.lastSyncedHash;
-			const baseDevice = base?.lastSyncedBy;
-			const currentDevice = snapshot.currentDeviceId;
 
-			const cameFromRemoteDevice =
-				baseDevice && baseDevice !== currentDevice;
-
-			// new file or unknown state
+			// first encounter between devices
 			if (!baseHash) {
-				// prevent swap/ping-pong when remote-originated
-				if (cameFromRemoteDevice) {
-					downloads.push({
-						path: remote.path,
-						action: "download",
-						remoteHash: remote.hash,
-						fileId,
-					});
-					continue;
-				}
+				// IMPORTANT FIX:
+				// DO NOT guess ownership by fileId comparison anymore
+				// Instead: prefer "last modified wins" OR safe conflict
 
-				const localWins = local.fileId > remote.fileId;
-
-				if (localWins) {
-					uploads.push({
-						path: local.path,
-						action: "upload",
-						localHash: local.hash,
-						fileId,
-					});
-				} else {
-					downloads.push({
-						path: remote.path,
-						action: "download",
-						remoteHash: remote.hash,
-						fileId,
-					});
-				}
-
+				// If timestamps exist in manifests in future, use them.
+				// For now: safest behavior is conflict instead of overwrite
+				conflicts.push({
+					path: local.path,
+					localHash: local.hash,
+					remoteHash: remote.hash,
+				});
 				continue;
 			}
 
-			// directional-aware change detection
 			const localChanged = local.hash !== baseHash;
+			const remoteChanged = remote.hash !== baseHash;
 
-			const remoteChanged =
-				remote.hash !== baseHash &&
-				baseDevice !== currentDevice;
-
+			// true conflict - both changed
 			if (localChanged && remoteChanged) {
 				conflicts.push({
 					path: local.path,
@@ -135,26 +100,35 @@ export function createSyncPlan(
 					remoteHash: remote.hash,
 					baseHash,
 				});
-			} else if (localChanged) {
+				continue;
+			}
+
+			// only locals changed
+			if (localChanged && !remoteChanged) {
 				uploads.push({
 					path: local.path,
 					action: "upload",
 					localHash: local.hash,
 					fileId,
 				});
-			} else if (remoteChanged) {
+				continue;
+			}
+
+			// only remotes changed
+			if (remoteChanged && !localChanged) {
 				downloads.push({
 					path: remote.path,
 					action: "download",
 					remoteHash: remote.hash,
 					fileId,
 				});
+				continue;
 			}
 
 			continue;
 		}
 
-		// only local exists
+		// only locals exist
 		if (local && !remote) {
 			uploads.push({
 				path: local.path,
@@ -165,7 +139,7 @@ export function createSyncPlan(
 			continue;
 		}
 
-		// only remote exists
+		// only remotes exist
 		if (remote && !local) {
 			downloads.push({
 				path: remote.path,

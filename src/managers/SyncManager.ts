@@ -30,6 +30,8 @@ export class SyncManager {
 				return;
 			}
 
+			await this.plugin.snapshotManager.ensureFileIdsExist();
+
 			// load snapshot (base state)
 			const snapshot = await this.plugin.snapshotManager.loadSnapshot();
 

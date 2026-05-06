@@ -136,6 +136,15 @@ export class WebRTCManager {
 		});
 	}
 
+	private getIdByChannel(channel: RTCDataChannel): string | undefined {
+		for (const [id, conn] of this.connections.entries()) {
+			if (conn.channel === channel) {
+				return id;
+			}
+		}
+		return undefined;
+	}
+
 	public isConnected(id: string): boolean {
 		const entry = this.connections.get(id);
 		if (!entry) return false;
@@ -226,7 +235,14 @@ export class WebRTCManager {
 		};
 
 		channel.onmessage = (event) => {
-			this.handleMessage(id, event.data);
+			const realId = this.getIdByChannel(channel);
+
+			if (!realId) {
+				console.warn("[RTC] Unknown channel for message");
+				return;
+			}
+
+			this.handleMessage(realId, event.data);
 		};
 	}
 

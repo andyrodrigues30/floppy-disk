@@ -63,6 +63,8 @@ function shouldExclude(app: App, path: string): boolean {
     path.startsWith(app.vault.configDir) ||
     path.startsWith(".trash/") ||
     path.startsWith(".git/") ||
-    path.startsWith(`${app.vault.configDir}/plugins/floppy-disk/`)
+    path.startsWith(`${app.vault.configDir}/plugins/floppy-disk/`)||
+    path.endsWith(".bak") ||
+    path.includes(".bak.")
   );
 }

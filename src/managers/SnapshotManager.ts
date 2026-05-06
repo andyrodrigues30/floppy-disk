@@ -24,7 +24,32 @@ export class SnapshotManager {
 			version: 1,
 			currentDeviceId: undefined,
 			files: {},
+			pathIndex: {},
 		};
+	}
+
+	public async ensureFileIdsExist(): Promise<void> {
+		const snapshot = await this.loadSnapshot();
+		const files = this.app.vault.getFiles();
+
+		let changed = false;
+
+		for (const file of files) {
+			if (!snapshot.files[file.path]) {
+				snapshot.files[file.path] = {
+					fileId: crypto.randomUUID(),
+					lastSyncedHash: "",
+					lastSyncedTimestamp: 0,
+					lastSyncedBy: ""
+				};
+
+				changed = true;
+			}
+		}
+
+		if (changed) {
+			await this.saveSnapshot();
+		}
 	}
 
 	public async ensureSnapshotExists(): Promise<Snapshot> {
@@ -145,24 +170,23 @@ export class SnapshotManager {
 		const currentDeviceId = snapshot.currentDeviceId;
 		const now = Date.now();
 
-		for (const [path, hash] of Object.entries(finalManifest.files)) {
-			const fileSnapshot: FileSnapshot = {
-				lastSyncedHash: hash,
+		for (const entry of Object.values(finalManifest.files)) {
+			snapshot.pathIndex ??= {};
+			snapshot.pathIndex[entry.path] = entry.fileId;
+
+			snapshot.files[entry.fileId] = {
+				fileId: entry.fileId,
+				lastSyncedHash: entry.hash,
 				lastSyncedTimestamp: now,
 				lastSyncedBy: currentDeviceId,
 			};
-
-			snapshot.files[path] = fileSnapshot;
 		}
 
 		await this.saveSnapshot();
 		return snapshot;
 	}
 
-	public async updateFileSync(
-		filePath: string,
-		fileHash: string,
-	): Promise<void> {
+	public async updateFileSync(filePath: string, fileHash: string): Promise<void> {
 		const snapshot = await this.loadSnapshot();
 
 		if (!snapshot.currentDeviceId) {
@@ -172,13 +196,19 @@ export class SnapshotManager {
 		const deviceId = snapshot.currentDeviceId;
 		const now = Date.now();
 
-		const fileSnapshot: FileSnapshot = {
+		// get fileId from pathIndex (NEW REQUIRED STRUCTURE)
+		const fileId = snapshot.pathIndex?.[filePath] ?? crypto.randomUUID();
+
+		// ensure pathIndex exists
+		if (!snapshot.pathIndex) snapshot.pathIndex = {};
+		snapshot.pathIndex[filePath] = fileId;
+
+		snapshot.files[fileId] = {
+			fileId,
 			lastSyncedHash: fileHash,
 			lastSyncedTimestamp: now,
 			lastSyncedBy: deviceId,
 		};
-
-		snapshot.files[filePath] = fileSnapshot;
 
 		await this.saveSnapshot();
 	}

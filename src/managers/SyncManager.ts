@@ -1,7 +1,7 @@
 import { App, Notice } from "obsidian";
 
 import { Manifest } from "../types/manifest";
-import { SyncPlan } from "../types/sync";
+import { SyncPlan, SyncProgress } from "../types/sync";
 
 import FloppyDiskPlugin from "../main";
 
@@ -34,8 +34,6 @@ export class SyncManager {
 			const snapshot = await this.plugin.snapshotManager.loadSnapshot();
 
 			// handshake
-			// TODO: remove following line - no need to handshake again
-			// await this.plugin.webrtcManager.startHandshake(remoteDeviceId);
 
 			console.log("[SYNC] WAITING FOR REMOTE MANIFEST...");
 
@@ -46,6 +44,8 @@ export class SyncManager {
 				);
 
 			console.log("[SYNC] WAITING FOR REMOTE MANIFEST...");
+
+			await this.plugin.snapshotManager.ensureFileIdsExist();
 
 			const localManifest: Manifest =
 				await this.plugin.webrtcManager.generateLocalManifest();

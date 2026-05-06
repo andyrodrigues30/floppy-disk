@@ -1,8 +1,14 @@
-export type FileHashMap = Record<string, string>;
+export interface ManifestFileEntry {
+  fileId: string;
+  path: string;
+  hash: string;
+}
+
+export type ManifestFileMap = Record<string, ManifestFileEntry>;
 
 export interface Manifest {
   vaultId: string;
   deviceId: string;
   generatedAt: number;
-  files: FileHashMap;
+  files: ManifestFileMap;
 }

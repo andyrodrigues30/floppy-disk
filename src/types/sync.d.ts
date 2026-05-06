@@ -1,5 +1,6 @@
 export interface SyncAction {
   path: string;
+  fileId: string;
   action: "upload" | "download" | "delete" | "skip";
   localHash?: string;
   remoteHash?: string;
@@ -11,6 +12,7 @@ export interface SyncPlan {
   downloads: SyncAction[];
   deletes: SyncAction[];
   conflicts: FileConflict[];
+  renames: RenameAction[];
 }
 
 export type SyncPhase =
@@ -45,4 +47,10 @@ export interface FileConflict {
   localHash: string;
   remoteHash: string;
   baseHash?: string;
+}
+
+export interface RenameAction {
+  fileId: string;
+  oldPath: string;
+  newPath: string;
 }

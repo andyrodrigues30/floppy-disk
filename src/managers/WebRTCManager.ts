@@ -423,6 +423,8 @@ export class WebRTCManager {
 			throw new Error("WebRTCManager: snapshotManager not initialized");
 		}
 
+		await this.plugin.snapshotManager.ensureFileIdsExist();
+
 		const id: string = this.plugin.settings.thisDevice.id;
 
 		if (!id) {

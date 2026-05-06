@@ -349,8 +349,32 @@ export class WebRTCManager {
 
 			if (accepted) {
 				console.log(`[RTC] HANDSHAKE VERIFIED: ${msg.deviceId}`);
+
+				// find the connection that received this handshake
+				const entry = [...this.connections.entries()]
+					.find(([_, conn]) => conn.channel.readyState === "open");
+
+				if (!entry) {
+					console.warn("No active connection for handshake");
+					return;
+				}
+
+				const [oldId, conn] = entry;
+
+				// if already correct, skip
+				if (oldId !== msg.deviceId) {
+					console.log(`[RTC] REBIND ${oldId} → ${msg.deviceId}`);
+
+					this.connections.delete(oldId);
+					this.connections.set(msg.deviceId, conn);
+
+					this.readyConnections.delete(oldId);
+				}
+
 				this.readyConnections.add(msg.deviceId);
+
 				this.updateUI();
+				console.log("CONNECTIONS AFTER HANDSHAKE:", Array.from(this.connections.keys()));
 			}
 		} catch (err) {
 			console.error("Handshake error:", err);

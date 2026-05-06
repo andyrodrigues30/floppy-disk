@@ -69,15 +69,12 @@ export class WebRTCManager {
 			iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 		});
 
-		const deviceId = this.resolveDeviceId(id);
-
 		if (isInitiator) {
 			const channel = peer.createDataChannel("floppy-disk");
-			this.attachConnection(deviceId, peer, channel);
+			this.attachConnection(id, peer, channel);
 		} else {
 			peer.ondatachannel = (event) => {
-				const TEMP_ID = crypto.randomUUID();
-				this.attachConnection(TEMP_ID, peer, event.channel);
+				this.attachConnection(id, peer, event.channel);
 			};
 		}
 
@@ -189,20 +186,14 @@ export class WebRTCManager {
 		peer: RTCPeerConnection,
 		channel: RTCDataChannel,
 	) {
+		console.log("ATTACH:", id, { peer, channel });
 
-		console.log("ATTACH:", id, {
-			peer,
-			channel
-		});
-
-		console.log("CONNECTION MAP KEYS:", Array.from(this.connections.keys()));
-		console.log("CHECKING DEVICE ID:", id);
-
+		// handles reconnects
 		this.connections.set(id, { peer, channel });
 
 		peer.onconnectionstatechange = () => {
 			const state = peer.connectionState;
-			console.log(`[attachConnection | onconnectionstatechange]: ${state}`)
+			console.log(`[RTC] onconnectionstatechange: ${id} | ${state}`);
 
 			if (
 				state === "failed" ||
@@ -210,24 +201,33 @@ export class WebRTCManager {
 				state === "closed"
 			) {
 				this.connections.delete(id);
+				this.readyConnections.delete(id);
 			}
 
 			this.updateUI();
 		};
 
 		channel.onopen = () => {
-			console.log("Data channel OPEN:", id);
+			console.log("[RTC] CHANNEL OPEN:", id);
+
 			this.updateUI();
+
+			// start identity verification
 			this.startHandshake(id);
 		};
 
 		channel.onclose = () => {
-			console.log("Data channel CLOSED:", id);
+			console.log("[RTC] CHANNEL CLOSED:", id);
+
 			this.connections.delete(id);
+			this.readyConnections.delete(id); // keep state consistent
+
 			this.updateUI();
 		};
 
-		channel.onmessage = (event) => this.handleMessage(id, event.data);
+		channel.onmessage = (event) => {
+			this.handleMessage(id, event.data);
+		};
 	}
 
 	// messaging
@@ -255,6 +255,7 @@ export class WebRTCManager {
 				break;
 
 			case "MANIFEST_RESPONSE":
+				console.log(`[SYNC] MANIFEST RECIEVED: ${id}`);
 				this.pendingManifestResolvers.get(id)?.(msg.payload);
 
 				this.pendingManifestResolvers.delete(id);
@@ -274,17 +275,24 @@ export class WebRTCManager {
 				break;
 
 			case "HANDSHAKE":
+				console.log(`[RTC] HANDSHAKE RECEIVED ${id}`)
 				await this.handleHandshake(msg);
 				break;
 
 			case "HANDSHAKE_ACK":
-				console.warn("Handshake ack:", msg.accepted);
+				console.log(`[RTC] HANDSHAKE ACK: ${id} accepted: ${msg.accepted}`);
+
+				console.log("[DEBUG] READY SET:", {
+					idFromChannel: id,
+					readyConnections: Array.from(this.readyConnections),
+					allConnections: Array.from(this.connections.keys())
+				});
 
 				if (msg.accepted) {
 					// mark connection as ready for sync
 					this.readyConnections.add(id);
 
-					console.log("Connection READY:", id);
+					console.log(`[RTC] Connection READY: ${id}`);
 					this.updateUI();
 				}
 
@@ -294,6 +302,7 @@ export class WebRTCManager {
 
 	// handshaking
 	public async startHandshake(id: string) {
+		console.log(`[RTC] SENDING HANDSHAKE: ${id}`);
 		const device = this.plugin.settings.thisDevice;
 
 		const payload = new TextEncoder().encode(device.fingerprint);
@@ -339,33 +348,9 @@ export class WebRTCManager {
 			);
 
 			if (accepted) {
-				await this.plugin.deviceManager.trustDevice(
-					msg.deviceId,
-					msg.deviceName ?? msg.deviceId,
-					msg.publicKey,
-					msg.fingerprint,
-				);
-
-				await this.plugin.saveSettings();
-
-				this.plugin.refreshSettingsUI();
-
-				this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
-
-				const entry = [...this.connections.entries()]
-					.find(([_, conn]) => conn.channel.readyState === "open");
-
-				if (!entry) {
-					console.warn("No active connection found for handshake:", msg.deviceId);
-				} else {
-					const [tempId, conn] = entry;
-
-					// remove old key
-					this.connections.delete(tempId);
-
-					// rebind to trusted device id
-					this.connections.set(msg.deviceId, conn);
-				}
+				console.log(`[RTC] HANDSHAKE VERIFIED: ${msg.deviceId}`);
+				this.readyConnections.add(msg.deviceId);
+				this.updateUI();
 			}
 		} catch (err) {
 			console.error("Handshake error:", err);
@@ -410,6 +395,7 @@ export class WebRTCManager {
 	}
 
 	public async requestRemoteManifest(id: string): Promise<Manifest> {
+		console.log(`[SYNC] REQUESTING MANIFEST: ${id}`);
 		return new Promise((resolve, reject) => {
 			if (!this.connections.has(id)) {
 				return reject(new Error("Device not connected"));
@@ -417,10 +403,13 @@ export class WebRTCManager {
 
 			this.pendingManifestResolvers.set(id, resolve);
 
-			if (!this.readyConnections.has(id)) {
-				throw new Error("Connection not ready for manifest request");
+			if (!this.connections.has(id)) {
+				throw new Error("Device not connected");
 			}
 
+			if (!this.readyConnections.has(id)) {
+				throw new Error("Device not handshake-ready");
+			}
 			this.sendMessage(id, {
 				type: "REQUEST_MANIFEST",
 			});

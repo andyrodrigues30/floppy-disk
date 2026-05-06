@@ -19,7 +19,11 @@ export class SyncManager {
 	}
 
 	async syncDevice(remoteDeviceId: string): Promise<void> {
+		console.log(`[SYNC] START: ${remoteDeviceId}`);
 		try {
+			await this.plugin.snapshotManager.setCurrentDevice(
+				this.plugin.settings.thisDevice.id
+			);
 
 			if (!this.plugin.webrtcManager.isConnected(remoteDeviceId)) {
 				new Notice("Device not connected yet.");
@@ -30,13 +34,18 @@ export class SyncManager {
 			const snapshot = await this.plugin.snapshotManager.loadSnapshot();
 
 			// handshake
-			await this.plugin.webrtcManager.startHandshake(remoteDeviceId);
+			// TODO: remove following line - no need to handshake again
+			// await this.plugin.webrtcManager.startHandshake(remoteDeviceId);
+
+			console.log("[SYNC] WAITING FOR REMOTE MANIFEST...");
 
 			// exchange manifests
 			const remoteManifest: Manifest =
 				await this.plugin.webrtcManager.requestRemoteManifest(
 					remoteDeviceId,
 				);
+
+			console.log("[SYNC] WAITING FOR REMOTE MANIFEST...");
 
 			const localManifest: Manifest =
 				await this.plugin.webrtcManager.generateLocalManifest();

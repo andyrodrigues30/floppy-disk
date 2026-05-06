@@ -82,13 +82,29 @@ export function createSyncPlan(
 
 			const baseHash = base?.lastSyncedHash;
 
-			// never seen before
+			// new or unknown file state
 			if (!baseHash) {
-				conflicts.push({
-					path: local.path,
-					localHash: local.hash,
-					remoteHash: remote.hash,
-				});
+				// deterministic winner prevents ping-pong
+				// (same rule on all devices)
+
+				const localWins = local.fileId > remote.fileId;
+
+				if (localWins) {
+					uploads.push({
+						path: local.path,
+						action: "upload",
+						localHash: local.hash,
+						fileId,
+					});
+				} else {
+					downloads.push({
+						path: remote.path,
+						action: "download",
+						remoteHash: remote.hash,
+						fileId,
+					});
+				}
+
 				continue;
 			}
 

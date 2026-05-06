@@ -163,15 +163,39 @@ export class WebRTCManager {
 		return channel.readyState === "open";
 	}
 
+	public isReady(id: string): boolean {
+		return this.readyConnections.has(id);
+	}
+
 	public async connectToDevice(id: string): Promise<string> {
 		const trusted = this.plugin.deviceManager.getTrustedDevices();
 		if (!trusted.find(d => d.id === id)) {
 			throw new Error("Attempting to connect to unknown device");
 		}
 
-		if (this.connections.has(id)) {
-			console.warn("Already have connection for", id);
-			return "";
+		const existing = this.connections.get(id);
+
+		if (existing) {
+			const pc = existing.peer;
+			const channel = existing.channel;
+
+			const isAlive =
+				pc.connectionState === "connected" &&
+				channel.readyState === "open";
+
+			if (isAlive) {
+				console.warn("Already connected to", id);
+				return "";
+			}
+
+			console.warn("Cleaning up stale connection:", id);
+
+			try {
+				pc.close();
+			} catch { }
+
+			this.connections.delete(id);
+			this.readyConnections.delete(id);
 		}
 
 		const peer = new RTCPeerConnection({
@@ -188,6 +212,13 @@ export class WebRTCManager {
 		await this.waitForIceGathering(peer);
 
 		return JSON.stringify(peer.localDescription);
+	}
+
+	async reconnect(deviceId: string) {
+		console.log("Reconnecting to", deviceId);
+		await new Promise(r => setTimeout(r, 1000));
+
+		this.connectToDevice(deviceId);
 	}
 
 	private attachConnection(
@@ -211,6 +242,7 @@ export class WebRTCManager {
 			) {
 				this.connections.delete(id);
 				this.readyConnections.delete(id);
+				this.reconnect(id);
 			}
 
 			this.updateUI();

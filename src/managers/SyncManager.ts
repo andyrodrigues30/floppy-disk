@@ -33,8 +33,21 @@ export class SyncManager {
 			// load snapshot (base state)
 			const snapshot = await this.plugin.snapshotManager.loadSnapshot();
 
-			// handshake
+			// wait for connection + handshake
+			const timeout = Date.now() + 10000;
 
+			while (
+				!this.plugin.webrtcManager.isConnected(remoteDeviceId) ||
+				!this.plugin.webrtcManager.isReady(remoteDeviceId)
+			) {
+				if (Date.now() > timeout) {
+					throw new Error("Connection/handshake timeout");
+				}
+
+				await new Promise(r => setTimeout(r, 200));
+			}
+
+			// handshake
 			console.log("[SYNC] WAITING FOR REMOTE MANIFEST...");
 
 			// exchange manifests

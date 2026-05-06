@@ -407,6 +407,7 @@ export class WebRTCManager {
 			this.plugin.app,
 			this.plugin.app.vault.getName(),
 			this.plugin.settings.thisDevice.id,
+			this.plugin.snapshotManager
 		);
 
 		const msg: ManifestResponseMessage = {

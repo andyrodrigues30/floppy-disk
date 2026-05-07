@@ -535,9 +535,14 @@ export class WebRTCManager {
 		while (offset < buffer.byteLength) {
 			const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
 
-			const chunkBase64 = btoa(
-				String.fromCharCode(...new Uint8Array(chunk)),
-			);
+			const bytes = new Uint8Array(chunk);
+
+			let binary = "";
+			for (let i = 0; i < bytes.length; i++) {
+				binary += String.fromCharCode(bytes[i]);
+			}
+
+			const chunkBase64 = btoa(binary);
 
 			this.sendMessage(id, {
 				type: "FILE_CHUNK",
@@ -677,9 +682,14 @@ export class WebRTCManager {
 					if (isFileChunkMessage(parsed) && parsed.path === path) {
 						const buffers = this.fileBuffers.get(path)!;
 
-						buffers[parsed.chunkIndex] = new Uint8Array(
-							parsed.data,
-						);
+						const binaryString = atob(parsed.data);
+						const bytes = new Uint8Array(binaryString.length);
+
+						for (let i = 0; i < binaryString.length; i++) {
+							bytes[i] = binaryString.charCodeAt(i);
+						}
+
+						buffers[parsed.chunkIndex] = bytes;
 					} else if (
 						isFileCompleteMessage(parsed) &&
 						parsed.path === path

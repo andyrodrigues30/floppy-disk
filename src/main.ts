@@ -12,7 +12,6 @@ import { registerRegenerateKeysCommands } from "./commands/registerRegenerateKey
 import { SnapshotManager } from "./managers/SnapshotManager";
 import { SyncManager } from "./managers/SyncManager";
 import { DeviceManager } from "./managers/DeviceManager";
-import { PairingManager } from "./managers/PairingManager";
 import { WebRTCManager } from "./managers/WebRTCManager";
 
 import { FloppyDiskSettingsTab } from "./ui/FloppyDiskSettingsTab";
@@ -27,7 +26,6 @@ export default class FloppyDiskPlugin extends Plugin {
   public settings!: FloppyDiskSettings;
 
   public snapshotManager!: SnapshotManager;
-  public pairingManager!: PairingManager;
   public syncManager!: SyncManager;
   public deviceManager!: DeviceManager;
   public webrtcManager!: WebRTCManager;
@@ -66,7 +64,6 @@ export default class FloppyDiskPlugin extends Plugin {
     await this.snapshotManager.ensureFileIdsExist();
     await this.snapshotManager.setCurrentDevice(this.settings.thisDevice.id)
     this.webrtcManager = new WebRTCManager(this);
-    this.pairingManager = new PairingManager(this);
     this.syncManager = new SyncManager(this.app, this);
     this.deviceManager = new DeviceManager(this);
 

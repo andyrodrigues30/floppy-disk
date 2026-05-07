@@ -595,6 +595,8 @@ export class WebRTCManager {
 		}
 
 		buffers[msg.chunkIndex] = bytes;
+
+		void this.tryResolveFile(msg.path);
 	}
 
 	public async reconnectAllDevices(): Promise<void> {

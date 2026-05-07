@@ -29,9 +29,14 @@ export async function generateManifest(
         const buffer = await app.vault.readBinary(file);
         const hash = await FloppyDiskCrypto.computeHash(buffer);
 
-        const existing = snapshot.files[file.path];
+        const fileId = snapshot.pathIndex[file.path];
 
-        // IMPORTANT:
+        if (!fileId) {
+          throw new Error(`Missing fileId for ${file.path}`);
+        }
+
+        const existing = snapshot.files[fileId];
+
         // fileId MUST come ONLY from snapshot
         if (!existing?.fileId) {
           throw new Error(
@@ -39,10 +44,18 @@ export async function generateManifest(
           );
         }
 
+        const stat = await app.vault.adapter.stat(file.path);
+
+        if (!stat) {
+          throw new Error(`Failed to stat ${file.path}`);
+        }
+
         return {
           fileId: existing.fileId,
           path: file.path,
-          hash
+          hash,
+          modified: stat.mtime,
+          deviceId
         };
       })
   );
@@ -63,7 +76,7 @@ function shouldExclude(app: App, path: string): boolean {
     path.startsWith(app.vault.configDir) ||
     path.startsWith(".trash/") ||
     path.startsWith(".git/") ||
-    path.startsWith(`${app.vault.configDir}/plugins/floppy-disk/`)||
+    path.startsWith(`${app.vault.configDir}/plugins/floppy-disk/`) ||
     path.endsWith(".bak") ||
     path.includes(".bak.")
   );

@@ -4,6 +4,7 @@ import { FloppyDiskSettings } from "../types/settings";
 import { FileSnapshot, Snapshot } from "../types/snapshot";
 import { Manifest } from "../types/manifest";
 import { SyncProgress } from "../types/sync";
+import { FloppyDiskCrypto } from "../utils/cryptoHelper";
 
 export class SnapshotManager {
 	private app: App;
@@ -45,8 +46,13 @@ export class SnapshotManager {
 
 				snapshot.files[fileId] = {
 					fileId,
+
+					currentHash: "",
+					modifiedTime: 0,
+
 					lastSyncedHash: "",
 					lastSyncedTimestamp: 0,
+
 					lastSyncedBy: ""
 				};
 
@@ -57,8 +63,13 @@ export class SnapshotManager {
 			if (!snapshot.files[fileId]) {
 				snapshot.files[fileId] = {
 					fileId,
+
+					currentHash: "",
+					modifiedTime: 0,
+
 					lastSyncedHash: "",
 					lastSyncedTimestamp: 0,
+
 					lastSyncedBy: ""
 				};
 
@@ -195,8 +206,13 @@ export class SnapshotManager {
 
 			snapshot.files[entry.fileId] = {
 				fileId: entry.fileId,
+
+				currentHash: entry.hash,
+				modifiedTime: now,
+
 				lastSyncedHash: entry.hash,
 				lastSyncedTimestamp: now,
+
 				lastSyncedBy: currentDeviceId,
 			};
 		}
@@ -230,8 +246,13 @@ export class SnapshotManager {
 
 		snapshot.files[fileId] = {
 			fileId,
+
+			currentHash: fileHash,
+			modifiedTime: now,
+
 			lastSyncedHash: fileHash,
 			lastSyncedTimestamp: now,
+
 			lastSyncedBy: deviceId,
 		};
 
@@ -240,5 +261,50 @@ export class SnapshotManager {
 
 	public recordLastSynced(id: string) {
 		this.lastSynced.set(id, Date.now());
+	}
+
+	public async updateLocalFileState(file: TFile): Promise<void> {
+
+		const snapshot = await this.loadSnapshot();
+
+		if (!snapshot.pathIndex) {
+			snapshot.pathIndex = {};
+		}
+
+		let fileId = snapshot.pathIndex[file.path];
+
+		// new file
+		if (!fileId) {
+
+			fileId = crypto.randomUUID();
+
+			snapshot.pathIndex[file.path] = fileId;
+		}
+
+		const buffer = await this.app.vault.readBinary(file);
+
+		const hash = await FloppyDiskCrypto.computeHash(buffer);
+
+		const stat = await this.app.vault.adapter.stat(file.path);
+
+		snapshot.files[fileId] = {
+
+			fileId,
+
+			currentHash: hash,
+
+			modifiedTime: stat?.mtime ?? Date.now(),
+
+			lastSyncedHash:
+				snapshot.files[fileId]?.lastSyncedHash ?? "",
+
+			lastSyncedTimestamp:
+				snapshot.files[fileId]?.lastSyncedTimestamp ?? 0,
+
+			lastSyncedBy:
+				snapshot.files[fileId]?.lastSyncedBy ?? "",
+		};
+
+		await this.saveSnapshot();
 	}
 }

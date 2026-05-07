@@ -70,6 +70,8 @@ export default class FloppyDiskPlugin extends Plugin {
     this.syncManager = new SyncManager(this.app, this);
     this.deviceManager = new DeviceManager(this);
 
+    this.registerVaultEvents();
+
     // add settings tab
     this.settingsTab = new FloppyDiskSettingsTab(this.app, this, this.webrtcManager, this.settings.thisDevice.id);
     this.addSettingTab(this.settingsTab);
@@ -121,5 +123,26 @@ export default class FloppyDiskPlugin extends Plugin {
 
   public refreshSettingsUI(): void {
     this.settingsTab?.display();
+  }
+
+  private registerVaultEvents() {
+    this.registerEvent(
+      this.app.vault.on("modify", async (file) => {
+
+        if (!(file instanceof TFile)) {
+          return;
+        }
+
+        try {
+          await this.snapshotManager.updateLocalFileState(file);
+        } catch (err) {
+          console.error(
+            "[FloppyDisk] Failed updating local file state:",
+            file.path,
+            err
+          );
+        }
+      })
+    );
   }
 }

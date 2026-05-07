@@ -424,6 +424,13 @@ export class WebRTCManager {
 	}
 
 	private async sendManifest(id: string) {
+
+		// ensure snapshot is consistent with vault
+		await this.plugin.snapshotManager.ensureFileIdsExist();
+
+		// reload snapshot AFTER repair
+		await this.plugin.snapshotManager.loadSnapshot();
+
 		const manifest = await generateManifest(
 			this.plugin.app,
 			this.plugin.app.vault.getName(),

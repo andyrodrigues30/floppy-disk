@@ -12,6 +12,7 @@ export async function generateManifest(
 ): Promise<Manifest> {
 
   const snapshot = await snapshotManager.loadSnapshot();
+
   const files = app.vault.getFiles();
 
   const manifest: Manifest = {
@@ -22,49 +23,68 @@ export async function generateManifest(
   };
 
   const results = await Promise.all(
+
     files
       .filter(file => !shouldExclude(app, file.path))
+
       .map(async (file) => {
 
-        const buffer = await app.vault.readBinary(file);
-        const hash = await FloppyDiskCrypto.computeHash(buffer);
-
-        const fileId = snapshot.pathIndex[file.path];
+        // ensure file has fileId
+        const fileId = snapshot.pathIndex?.[file.path];
 
         if (!fileId) {
-          throw new Error(`Missing fileId for ${file.path}`);
+          throw new Error(
+            `Missing fileId for ${file.path}`
+          );
         }
 
         const existing = snapshot.files[fileId];
 
-        // fileId MUST come ONLY from snapshot
-        if (!existing?.fileId) {
+        if (!existing) {
           throw new Error(
-            `Missing fileId for ${file.path}. Snapshot not initialized correctly.`
+            `Missing snapshot entry for ${file.path}`
           );
         }
 
-        const stat = await app.vault.adapter.stat(file.path);
+        // read file
+        const buffer =
+          await app.vault.readBinary(file);
+
+        // hash content
+        const hash =
+          await FloppyDiskCrypto.computeHash(buffer);
+
+        // filesystem metadata
+        const stat =
+          await app.vault.adapter.stat(file.path);
 
         if (!stat) {
-          throw new Error(`Failed to stat ${file.path}`);
+          throw new Error(
+            `Failed to stat ${file.path}`
+          );
         }
 
         return {
-          fileId: existing.fileId,
+          fileId,
           path: file.path,
           hash,
-          modified: stat.mtime,
+          modified:
+            stat.mtime ??
+            existing.modifiedTime ??
+            Date.now(),
           deviceId
         };
       })
   );
 
+  // build manifest map
   for (const entry of results) {
     manifest.files[entry.fileId] = {
       fileId: entry.fileId,
       path: entry.path,
-      hash: entry.hash
+      hash: entry.hash,
+      modified: entry.modified,
+      deviceId: entry.deviceId
     };
   }
 

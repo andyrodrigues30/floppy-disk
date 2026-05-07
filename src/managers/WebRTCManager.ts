@@ -52,17 +52,6 @@ export class WebRTCManager {
 		this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
 	};
 
-	private resolveDeviceId(id: string): string {
-		const trusted = this.plugin.deviceManager.getTrustedDevices();
-
-		const match = trusted.find(d => d.id === id);
-
-		if (match) return match.id;
-
-		console.warn("Unknown device id used in WebRTC:", id);
-		return id;
-	}
-
 	// connect
 	private createPeer(id: string, isInitiator: boolean): RTCPeerConnection {
 		const peer = new RTCPeerConnection({

@@ -1,4 +1,4 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, TFile } from "obsidian";
 
 import { Device } from "./types/device";
 import { FloppyDiskSettings } from "./types/settings";
@@ -29,7 +29,7 @@ export default class FloppyDiskPlugin extends Plugin {
   public snapshotManager!: SnapshotManager;
   public pairingManager!: PairingManager;
   public syncManager!: SyncManager;
-  public deviceManager: DeviceManager;
+  public deviceManager!: DeviceManager;
   public webrtcManager!: WebRTCManager;
 
   settingsTab?: FloppyDiskSettingsTab;

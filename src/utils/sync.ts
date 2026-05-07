@@ -18,7 +18,6 @@ export function createSyncPlan(
 	localManifest: Manifest,
 	remoteManifest: Manifest,
 ): SyncPlan {
-
 	const uploads: SyncAction[] = [];
 	const downloads: SyncAction[] = [];
 	const deletes: SyncAction[] = [];
@@ -36,13 +35,9 @@ export function createSyncPlan(
 		remoteById.set(entry.fileId, entry);
 	}
 
-	const allIds = new Set([
-		...localById.keys(),
-		...remoteById.keys(),
-	]);
+	const allIds = new Set([...localById.keys(), ...remoteById.keys()]);
 
 	for (const fileId of allIds) {
-
 		const local = localById.get(fileId);
 		const remote = remoteById.get(fileId);
 
@@ -74,18 +69,11 @@ export function createSyncPlan(
 
 		// rename detection
 		if (local.path !== remote.path) {
-
-			const newest =
-				local.modified >= remote.modified
-					? local
-					: remote;
+			const newest = local.modified >= remote.modified ? local : remote;
 
 			renames.push({
 				fileId,
-				oldPath:
-					newest === local
-						? remote.path
-						: local.path,
+				oldPath: newest === local ? remote.path : local.path,
 
 				newPath: newest.path,
 			});
@@ -100,7 +88,6 @@ export function createSyncPlan(
 
 		// newest wins
 		if (local.modified > remote.modified) {
-
 			uploads.push({
 				action: "upload",
 				path: local.path,
@@ -112,7 +99,6 @@ export function createSyncPlan(
 		}
 
 		if (remote.modified > local.modified) {
-
 			downloads.push({
 				action: "download",
 				path: remote.path,
@@ -219,7 +205,29 @@ export async function executeSync(
 
 		// update snapshot hash
 		const hash = await FloppyDiskCrypto.computeHash(arrayBuffer);
-		await snapshotManager.updateFileSync(action.path, hash);
+		const snapshot = await snapshotManager.loadSnapshot();
+
+		// ensure file exists in snapshot BEFORE updating
+		let fileId = snapshot.pathIndex[action.path];
+
+		if (!fileId) {
+			fileId = crypto.randomUUID();
+
+			snapshot.pathIndex[action.path] = fileId;
+
+			snapshot.files[fileId] = {
+				fileId,
+				currentHash: hash,
+				modifiedTime: Date.now(),
+				lastSyncedHash: hash,
+				lastSyncedTimestamp: Date.now(),
+				lastSyncedBy: snapshot.currentDeviceId ?? remoteDeviceId,
+			};
+
+			await snapshotManager.saveSnapshot();
+		} else {
+			await snapshotManager.updateFileSync(action.path, hash);
+		}
 
 		console.warn(`Downloaded: ${action.path}`);
 	}

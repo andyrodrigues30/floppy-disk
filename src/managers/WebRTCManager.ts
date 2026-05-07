@@ -604,6 +604,28 @@ export class WebRTCManager {
 
 		const hash = await FloppyDiskCrypto.computeHash(fullBuffer.buffer);
 
+		const snapshot = await this.plugin.snapshotManager.loadSnapshot();
+
+		// ensure fileId exists
+		let fileId = snapshot.pathIndex[path];
+
+		if (!fileId) {
+			fileId = crypto.randomUUID();
+
+			snapshot.pathIndex[path] = fileId;
+
+			snapshot.files[fileId] = {
+				fileId,
+				currentHash: "",
+				modifiedTime: Date.now(),
+				lastSyncedHash: "",
+				lastSyncedTimestamp: 0,
+				lastSyncedBy: snapshot.currentDeviceId ?? "unknown"
+			};
+
+			await this.plugin.snapshotManager.saveSnapshot();
+		}
+
 		await this.plugin.snapshotManager.updateFileSync(path, hash);
 
 		this.fileBuffers.delete(path);

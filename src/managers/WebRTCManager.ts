@@ -38,7 +38,8 @@ export class WebRTCManager {
 	>();
 	private readyConnections = new Set<string>();
 	private fileBuffers: Map<string, Uint8Array[]> = new Map();
-	private fileChunkTotals = new Map<string, number>();
+	private fileChunkTotals: Map<string, number> = new Map();
+	private fileResolvers: Map<string, (data: Uint8Array) => void> = new Map();
 	private pendingManifestResolvers: Map<
 		string,
 		(manifest: Manifest) => void
@@ -307,9 +308,10 @@ export class WebRTCManager {
 				await this.handleFileChunk(msg);
 				break;
 
-			case "FILE_COMPLETE":
-				await this.assembleFile(msg.path);
+			case "FILE_COMPLETE": {
+				await this.tryResolveFile(msg.path);
 				break;
+			}
 
 			case "HANDSHAKE":
 				console.log(`[RTC] HANDSHAKE RECEIVED ${id}`);
@@ -447,29 +449,6 @@ export class WebRTCManager {
 		}
 	}
 
-	// private async sendManifest(id: string) {
-
-	// 	// ensure snapshot is consistent with vault
-	// 	await this.plugin.snapshotManager.ensureFileIdsExist();
-
-	// 	// reload snapshot AFTER repair
-	// 	await this.plugin.snapshotManager.loadSnapshot();
-
-	// 	const manifest = await generateManifest(
-	// 		this.plugin.app,
-	// 		this.plugin.app.vault.getName(),
-	// 		this.plugin.settings.thisDevice.id,
-	// 		this.plugin.snapshotManager
-	// 	);
-
-	// 	const msg: ManifestResponseMessage = {
-	// 		type: "MANIFEST_RESPONSE",
-	// 		payload: manifest,
-	// 	};
-
-	// 	this.sendMessage(id, msg);
-	// }
-
 	public async generateLocalManifest(): Promise<Manifest> {
 		if (!this.plugin.snapshotManager) {
 			throw new Error("WebRTCManager: snapshotManager not initialized");
@@ -562,6 +541,35 @@ export class WebRTCManager {
 		});
 	}
 
+	private async tryResolveFile(path: string) {
+		const buffers = this.fileBuffers.get(path);
+		const total = this.fileChunkTotals.get(path);
+
+		if (!buffers || total === undefined) return;
+
+		// ensure all chunks exist
+		for (let i = 0; i < total; i++) {
+			if (!buffers[i]) return;
+		}
+
+		const fullLength = buffers.reduce((sum, b) => sum + b.length, 0);
+		const fullBuffer = new Uint8Array(fullLength);
+
+		let offset = 0;
+		for (const chunk of buffers) {
+			fullBuffer.set(chunk, offset);
+			offset += chunk.length;
+		}
+
+		// resolve requestFile promise if waiting
+		this.fileResolvers.get(path)?.(fullBuffer);
+
+		// cleanup
+		this.fileResolvers.delete(path);
+		this.fileBuffers.delete(path);
+		this.fileChunkTotals.delete(path);
+	}
+
 	private async handleFileChunk(msg: FileChunkMessage) {
 		if (!this.fileBuffers.has(msg.path)) {
 			this.fileBuffers.set(msg.path, []);
@@ -578,56 +586,6 @@ export class WebRTCManager {
 		}
 
 		buffers[msg.chunkIndex] = bytes;
-	}
-
-	private async assembleFile(path: string) {
-		const buffers = this.fileBuffers.get(path);
-		const total = this.fileChunkTotals.get(path);
-
-		if (!buffers || total === undefined) return;
-
-		if (buffers.filter(Boolean).length !== total) {
-			console.warn("Missing chunks for", path);
-			return;
-		}
-
-		const totalLength = buffers.reduce(
-			(sum, chunk) => sum + chunk.length,
-			0,
-		);
-
-		const fullBuffer = new Uint8Array(totalLength);
-
-		let offset = 0;
-		for (const chunk of buffers) {
-			fullBuffer.set(chunk, offset);
-			offset += chunk.length;
-		}
-
-		if (isTextFile(path)) {
-			const content = new TextDecoder().decode(fullBuffer);
-
-			const file = this.plugin.app.vault.getAbstractFileByPath(path);
-
-			if (file instanceof TFile) {
-				await this.plugin.app.vault.modify(file, content);
-			} else {
-				await this.plugin.app.vault.create(path, content);
-			}
-		} else {
-			await this.plugin.app.vault.adapter.writeBinary(path, fullBuffer);
-		}
-
-		const hash = await FloppyDiskCrypto.computeHash(fullBuffer.buffer);
-
-		// ensure fileId exists
-		this.plugin.snapshotManager.getOrCreateFileId(path);
-		await this.plugin.snapshotManager.loadSnapshot();
-
-		await this.plugin.snapshotManager.updateFileSync(path, hash);
-
-		this.fileBuffers.delete(path);
-		this.fileChunkTotals.delete(path);
 	}
 
 	public async reconnectAllDevices(): Promise<void> {
@@ -658,73 +616,54 @@ export class WebRTCManager {
 			throw new Error(`No open channel to device ${id}`);
 		}
 
-		// initialize buffer in Map
 		this.fileBuffers.set(path, []);
 
 		return new Promise((resolve, reject) => {
 			const timeout = setTimeout(() => {
 				this.fileBuffers.delete(path);
+				this.fileResolvers.delete(path);
 				reject(new Error(`File request timed out: ${path}`));
-			}, 10000);
+			}, 15000);
+
+			// store resolver
+			this.fileResolvers.set(path, (data) => {
+				clearTimeout(timeout);
+				resolve(data);
+			});
 
 			const handleMessage = (event: MessageEvent) => {
-				if (!this.fileBuffers.has(path)) return;
+				if (typeof event.data !== "string") return;
 
-				if (typeof event.data === "string") {
-					let parsed: unknown;
+				let parsed: unknown;
 
-					try {
-						parsed = JSON.parse(event.data);
-					} catch {
-						return;
+				try {
+					parsed = JSON.parse(event.data);
+				} catch {
+					return;
+				}
+
+				// CHUNK
+				if (isFileChunkMessage(parsed) && parsed.path === path) {
+					const buffers = this.fileBuffers.get(path)!;
+
+					const binaryString = atob(parsed.data);
+					const bytes = new Uint8Array(binaryString.length);
+
+					for (let i = 0; i < binaryString.length; i++) {
+						bytes[i] = binaryString.charCodeAt(i);
 					}
 
-					if (isFileChunkMessage(parsed) && parsed.path === path) {
-						const buffers = this.fileBuffers.get(path)!;
+					buffers[parsed.chunkIndex] = bytes;
+				}
 
-						const binaryString = atob(parsed.data);
-						const bytes = new Uint8Array(binaryString.length);
-
-						for (let i = 0; i < binaryString.length; i++) {
-							bytes[i] = binaryString.charCodeAt(i);
-						}
-
-						buffers[parsed.chunkIndex] = bytes;
-					} else if (
-						isFileCompleteMessage(parsed) &&
-						parsed.path === path
-					) {
-						const buffers = this.fileBuffers.get(path);
-
-						if (!buffers) return;
-
-						const totalLength = buffers.reduce(
-							(sum, chunk) => sum + chunk.length,
-							0,
-						);
-
-						const fullBuffer = new Uint8Array(totalLength);
-
-						let offset = 0;
-						for (const chunk of buffers) {
-							if (!chunk) continue;
-							fullBuffer.set(chunk, offset);
-							offset += chunk.length;
-						}
-
-						// cleanup
-						this.fileBuffers.delete(path);
-						channel.removeEventListener("message", handleMessage);
-						clearTimeout(timeout);
-
-						resolve(fullBuffer);
-					}
+				// COMPLETE → attempt resolve
+				if (isFileCompleteMessage(parsed) && parsed.path === path) {
+					void this.tryResolveFile(path);
 				}
 			};
 
 			channel.addEventListener("message", handleMessage);
 
-			// Send request
 			channel.send(
 				JSON.stringify({
 					type: "FILE_REQUEST",

@@ -30,12 +30,28 @@ export async function generateManifest(
       .map(async (file) => {
 
         // ensure file has fileId
-        const fileId = snapshot.pathIndex?.[file.path];
+        let fileId = snapshot.pathIndex?.[file.path];
 
         if (!fileId) {
-          throw new Error(
-            `Missing fileId for ${file.path}`
-          );
+          fileId = crypto.randomUUID();
+
+          snapshot.pathIndex ??= {};
+          snapshot.pathIndex[file.path] = fileId;
+
+          const stat = await app.vault.adapter.stat(file.path);
+
+          snapshot.files[fileId] = {
+            fileId,
+
+            lastSyncedHash: "",
+            lastSyncedTimestamp: 0,
+            lastSyncedBy: deviceId ?? "",
+
+            currentHash: "",
+            modifiedTime: stat?.mtime ?? Date.now()
+          };
+
+          await snapshotManager.saveSnapshot();
         }
 
         const existing = snapshot.files[fileId];

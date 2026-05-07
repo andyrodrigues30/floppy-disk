@@ -1,7 +1,6 @@
 import { App, Notice, TFile } from "obsidian";
 
 import { Manifest, ManifestFileEntry } from "../types/manifest";
-import { FileSnapshot, Snapshot } from "../types/snapshot";
 import {
 	FileConflict,
 	RenameAction,
@@ -208,26 +207,8 @@ export async function executeSync(
 		const snapshot = await snapshotManager.loadSnapshot();
 
 		// ensure file exists in snapshot BEFORE updating
-		let fileId = snapshot.pathIndex[action.path];
-
-		if (!fileId) {
-			fileId = crypto.randomUUID();
-
-			snapshot.pathIndex[action.path] = fileId;
-
-			snapshot.files[fileId] = {
-				fileId,
-				currentHash: hash,
-				modifiedTime: Date.now(),
-				lastSyncedHash: hash,
-				lastSyncedTimestamp: Date.now(),
-				lastSyncedBy: snapshot.currentDeviceId ?? remoteDeviceId,
-			};
-
-			await snapshotManager.saveSnapshot();
-		} else {
-			await snapshotManager.updateFileSync(action.path, hash);
-		}
+		snapshotManager.getOrCreateFileId(action.path);
+		await snapshotManager.updateFileSync(action.path, hash);
 
 		console.warn(`Downloaded: ${action.path}`);
 	}

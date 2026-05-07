@@ -53,7 +53,7 @@ export class SnapshotManager {
 					lastSyncedHash: "",
 					lastSyncedTimestamp: 0,
 
-					lastSyncedBy: ""
+					lastSyncedBy: "",
 				};
 
 				changed = true;
@@ -70,7 +70,7 @@ export class SnapshotManager {
 					lastSyncedHash: "",
 					lastSyncedTimestamp: 0,
 
-					lastSyncedBy: ""
+					lastSyncedBy: "",
 				};
 
 				changed = true;
@@ -221,7 +221,10 @@ export class SnapshotManager {
 		return snapshot;
 	}
 
-	public async updateFileSync(filePath: string, fileHash: string): Promise<void> {
+	public async updateFileSync(
+		filePath: string,
+		fileHash: string,
+	): Promise<void> {
 		const snapshot = await this.loadSnapshot();
 
 		if (!snapshot.currentDeviceId) {
@@ -232,13 +235,7 @@ export class SnapshotManager {
 		const now = Date.now();
 
 		// get file id
-		const fileId = snapshot.pathIndex?.[filePath];
-
-		if (!fileId) {
-			throw new Error(
-				`Missing fileId for ${filePath}. Snapshot out of sync. Run ensureFileIdsExist() BEFORE sync.`
-			);
-		}
+		const fileId = this.getOrCreateFileId(filePath);
 
 		// ensure pathIndex exists
 		if (!snapshot.pathIndex) snapshot.pathIndex = {};
@@ -264,7 +261,6 @@ export class SnapshotManager {
 	}
 
 	public async updateLocalFileState(file: TFile): Promise<void> {
-
 		const snapshot = await this.loadSnapshot();
 
 		if (!snapshot.pathIndex) {
@@ -275,7 +271,6 @@ export class SnapshotManager {
 
 		// new file
 		if (!fileId) {
-
 			fileId = crypto.randomUUID();
 
 			snapshot.pathIndex[file.path] = fileId;
@@ -288,23 +283,47 @@ export class SnapshotManager {
 		const stat = await this.app.vault.adapter.stat(file.path);
 
 		snapshot.files[fileId] = {
-
 			fileId,
 
 			currentHash: hash,
 
 			modifiedTime: stat?.mtime ?? Date.now(),
 
-			lastSyncedHash:
-				snapshot.files[fileId]?.lastSyncedHash ?? "",
+			lastSyncedHash: snapshot.files[fileId]?.lastSyncedHash ?? "",
 
 			lastSyncedTimestamp:
 				snapshot.files[fileId]?.lastSyncedTimestamp ?? 0,
 
-			lastSyncedBy:
-				snapshot.files[fileId]?.lastSyncedBy ?? "",
+			lastSyncedBy: snapshot.files[fileId]?.lastSyncedBy ?? "",
 		};
 
 		await this.saveSnapshot();
+	}
+
+	public getOrCreateFileId(path: string): string {
+		const snapshot = this.snapshot ?? this.createEmptySnapshot();
+
+		this.snapshot = snapshot;
+
+		if (!snapshot.pathIndex) snapshot.pathIndex = {};
+
+		let fileId = snapshot.pathIndex[path];
+
+		if (!fileId) {
+			fileId = crypto.randomUUID();
+
+			snapshot.pathIndex[path] = fileId;
+
+			snapshot.files[fileId] = {
+				fileId,
+				currentHash: "",
+				modifiedTime: 0,
+				lastSyncedHash: "",
+				lastSyncedTimestamp: 0,
+				lastSyncedBy: "",
+			};
+		}
+
+		return fileId;
 	}
 }

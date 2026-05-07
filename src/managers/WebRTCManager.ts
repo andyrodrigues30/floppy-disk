@@ -50,7 +50,7 @@ export class WebRTCManager {
 
 	private updateUI() {
 		this.plugin.app.workspace.trigger(CONNECTION_CHANGED_EVENT);
-	};
+	}
 
 	// connect
 	private createPeer(id: string, isInitiator: boolean): RTCPeerConnection {
@@ -146,7 +146,7 @@ export class WebRTCManager {
 		console.log("CHECK CONNECTION:", id, {
 			connectionState: peer.connectionState,
 			iceState: peer.iceConnectionState,
-			channel: channel.readyState
+			channel: channel.readyState,
 		});
 
 		return channel.readyState === "open";
@@ -158,7 +158,7 @@ export class WebRTCManager {
 
 	public async connectToDevice(id: string): Promise<string> {
 		const trusted = this.plugin.deviceManager.getTrustedDevices();
-		if (!trusted.find(d => d.id === id)) {
+		if (!trusted.find((d) => d.id === id)) {
 			throw new Error("Attempting to connect to unknown device");
 		}
 
@@ -181,7 +181,7 @@ export class WebRTCManager {
 
 			try {
 				pc.close();
-			} catch { }
+			} catch {}
 
 			this.connections.delete(id);
 			this.readyConnections.delete(id);
@@ -205,7 +205,7 @@ export class WebRTCManager {
 
 	async reconnect(deviceId: string) {
 		console.log("Reconnecting to", deviceId);
-		await new Promise(r => setTimeout(r, 1000));
+		await new Promise((r) => setTimeout(r, 1000));
 
 		this.connectToDevice(deviceId);
 	}
@@ -312,17 +312,19 @@ export class WebRTCManager {
 				break;
 
 			case "HANDSHAKE":
-				console.log(`[RTC] HANDSHAKE RECEIVED ${id}`)
+				console.log(`[RTC] HANDSHAKE RECEIVED ${id}`);
 				await this.handleHandshake(msg);
 				break;
 
 			case "HANDSHAKE_ACK":
-				console.log(`[RTC] HANDSHAKE ACK: ${id} accepted: ${msg.accepted}`);
+				console.log(
+					`[RTC] HANDSHAKE ACK: ${id} accepted: ${msg.accepted}`,
+				);
 
 				console.log("[DEBUG] READY SET:", {
 					idFromChannel: id,
 					readyConnections: Array.from(this.readyConnections),
-					allConnections: Array.from(this.connections.keys())
+					allConnections: Array.from(this.connections.keys()),
 				});
 
 				if (msg.accepted) {
@@ -388,8 +390,9 @@ export class WebRTCManager {
 				console.log(`[RTC] HANDSHAKE VERIFIED: ${msg.deviceId}`);
 
 				// find the connection that received this handshake
-				const entry = [...this.connections.entries()]
-					.find(([_, conn]) => conn.channel.readyState === "open");
+				const entry = [...this.connections.entries()].find(
+					([_, conn]) => conn.channel.readyState === "open",
+				);
 
 				if (!entry) {
 					console.warn("No active connection for handshake");
@@ -411,7 +414,10 @@ export class WebRTCManager {
 				this.readyConnections.add(msg.deviceId);
 
 				this.updateUI();
-				console.log("CONNECTIONS AFTER HANDSHAKE:", Array.from(this.connections.keys()));
+				console.log(
+					"CONNECTIONS AFTER HANDSHAKE:",
+					Array.from(this.connections.keys()),
+				);
 			}
 		} catch (err) {
 			console.error("Handshake error:", err);
@@ -429,13 +435,13 @@ export class WebRTCManager {
 			await this.plugin.snapshotManager.ensureFileIdsExist();
 			await this.plugin.snapshotManager.loadSnapshot();
 
-			const manifest = await this.plugin.webrtcManager.generateLocalManifest();
+			const manifest =
+				await this.plugin.webrtcManager.generateLocalManifest();
 
 			this.sendMessage(id, {
 				type: "MANIFEST_RESPONSE",
 				payload: manifest,
 			});
-
 		} catch (err) {
 			console.error("[MANIFEST ERROR]", err);
 		}
@@ -479,7 +485,12 @@ export class WebRTCManager {
 
 		const vaultId: string = this.plugin.app.vault.getName();
 
-		return generateManifest(this.plugin.app, vaultId, id, this.plugin.snapshotManager);
+		return generateManifest(
+			this.plugin.app,
+			vaultId,
+			id,
+			this.plugin.snapshotManager,
+		);
 	}
 
 	public async requestRemoteManifest(id: string): Promise<Manifest> {
@@ -604,27 +615,9 @@ export class WebRTCManager {
 
 		const hash = await FloppyDiskCrypto.computeHash(fullBuffer.buffer);
 
-		const snapshot = await this.plugin.snapshotManager.loadSnapshot();
-
 		// ensure fileId exists
-		let fileId = snapshot.pathIndex[path];
-
-		if (!fileId) {
-			fileId = crypto.randomUUID();
-
-			snapshot.pathIndex[path] = fileId;
-
-			snapshot.files[fileId] = {
-				fileId,
-				currentHash: "",
-				modifiedTime: Date.now(),
-				lastSyncedHash: "",
-				lastSyncedTimestamp: 0,
-				lastSyncedBy: snapshot.currentDeviceId ?? "unknown"
-			};
-
-			await this.plugin.snapshotManager.saveSnapshot();
-		}
+		this.plugin.snapshotManager.getOrCreateFileId(path);
+		await this.plugin.snapshotManager.loadSnapshot();
 
 		await this.plugin.snapshotManager.updateFileSync(path, hash);
 

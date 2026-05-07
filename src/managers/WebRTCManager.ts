@@ -288,7 +288,7 @@ export class WebRTCManager {
 
 		switch (msg.type) {
 			case "REQUEST_MANIFEST":
-				await this.sendManifest(id);
+				this.handleManifestRequest(id);
 				break;
 
 			case "MANIFEST_RESPONSE":
@@ -423,28 +423,46 @@ export class WebRTCManager {
 		});
 	}
 
-	private async sendManifest(id: string) {
+	private async handleManifestRequest(id: string) {
+		try {
+			// ensure snapshot is stable BEFORE responding
+			await this.plugin.snapshotManager.ensureFileIdsExist();
+			await this.plugin.snapshotManager.loadSnapshot();
 
-		// ensure snapshot is consistent with vault
-		await this.plugin.snapshotManager.ensureFileIdsExist();
+			const manifest = await this.plugin.webrtcManager.generateLocalManifest();
 
-		// reload snapshot AFTER repair
-		await this.plugin.snapshotManager.loadSnapshot();
+			this.sendMessage(id, {
+				type: "MANIFEST_RESPONSE",
+				payload: manifest,
+			});
 
-		const manifest = await generateManifest(
-			this.plugin.app,
-			this.plugin.app.vault.getName(),
-			this.plugin.settings.thisDevice.id,
-			this.plugin.snapshotManager
-		);
-
-		const msg: ManifestResponseMessage = {
-			type: "MANIFEST_RESPONSE",
-			payload: manifest,
-		};
-
-		this.sendMessage(id, msg);
+		} catch (err) {
+			console.error("[MANIFEST ERROR]", err);
+		}
 	}
+
+	// private async sendManifest(id: string) {
+
+	// 	// ensure snapshot is consistent with vault
+	// 	await this.plugin.snapshotManager.ensureFileIdsExist();
+
+	// 	// reload snapshot AFTER repair
+	// 	await this.plugin.snapshotManager.loadSnapshot();
+
+	// 	const manifest = await generateManifest(
+	// 		this.plugin.app,
+	// 		this.plugin.app.vault.getName(),
+	// 		this.plugin.settings.thisDevice.id,
+	// 		this.plugin.snapshotManager
+	// 	);
+
+	// 	const msg: ManifestResponseMessage = {
+	// 		type: "MANIFEST_RESPONSE",
+	// 		payload: manifest,
+	// 	};
+
+	// 	this.sendMessage(id, msg);
+	// }
 
 	public async generateLocalManifest(): Promise<Manifest> {
 		if (!this.plugin.snapshotManager) {

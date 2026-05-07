@@ -21,6 +21,10 @@ export class SyncManager {
 	async syncDevice(remoteDeviceId: string): Promise<void> {
 		console.log(`[SYNC] START: ${remoteDeviceId}`);
 		try {
+
+			await this.plugin.snapshotManager.ensureFileIdsExist();
+			await this.plugin.snapshotManager.loadSnapshot();
+
 			await this.plugin.snapshotManager.setCurrentDevice(
 				this.plugin.settings.thisDevice.id
 			);

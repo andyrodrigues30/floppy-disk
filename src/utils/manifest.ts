@@ -11,9 +11,9 @@ export async function generateManifest(
   snapshotManager: SnapshotManager
 ): Promise<Manifest> {
 
-  const snapshot = await snapshotManager.loadSnapshot();
+  const files = [...app.vault.getFiles()];
 
-  const files = app.vault.getFiles();
+  const snapshot = await snapshotManager.loadSnapshot();
 
   const manifest: Manifest = {
     vaultId,

@@ -23,7 +23,6 @@ export class SyncManager {
 		try {
 
 			await this.plugin.snapshotManager.ensureFileIdsExist();
-			await this.plugin.snapshotManager.loadSnapshot();
 
 			await this.plugin.snapshotManager.setCurrentDevice(
 				this.plugin.settings.thisDevice.id
@@ -106,10 +105,20 @@ export class SyncManager {
 				},
 			);
 
-			// update snapshot after successful sync
+			// force snapshot refresh from disk state
+			await this.plugin.snapshotManager.ensureFileIdsExist();
+			await this.plugin.snapshotManager.loadSnapshot();
+
+			// now generate consistent manifest
+			await this.plugin.snapshotManager.ensureFileIdsExist();
+			await this.plugin.snapshotManager.loadSnapshot();
+
+			const finalManifest =
+				await this.plugin.webrtcManager.generateLocalManifest();
+
 			await this.plugin.snapshotManager.updateSnapshotAfterSync(
 				remoteDeviceId,
-				localManifest,
+				finalManifest,
 			);
 
 			this.plugin.snapshotManager.recordLastSynced(remoteDeviceId);

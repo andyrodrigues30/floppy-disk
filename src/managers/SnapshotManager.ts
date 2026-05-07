@@ -235,7 +235,7 @@ export class SnapshotManager {
 		const now = Date.now();
 
 		// get file id
-		const fileId = this.getOrCreateFileId(filePath);
+		const fileId = await this.getOrCreateFileId(filePath);
 
 		// ensure pathIndex exists
 		if (!snapshot.pathIndex) snapshot.pathIndex = {};
@@ -300,10 +300,8 @@ export class SnapshotManager {
 		await this.saveSnapshot();
 	}
 
-	public getOrCreateFileId(path: string): string {
-		const snapshot = this.snapshot ?? this.createEmptySnapshot();
-
-		this.snapshot = snapshot;
+	public async getOrCreateFileId(path: string): Promise<string> {
+		const snapshot = await this.loadSnapshot();
 
 		if (!snapshot.pathIndex) snapshot.pathIndex = {};
 
@@ -322,6 +320,8 @@ export class SnapshotManager {
 				lastSyncedTimestamp: 0,
 				lastSyncedBy: "",
 			};
+
+			await this.saveSnapshot();
 		}
 
 		return fileId;

@@ -165,6 +165,10 @@ export async function executeSync(
 
 		await webrtcManager.sendFileInChunks(remoteDeviceId, action.path);
 		console.warn(`Uploaded: ${action.path}`);
+		const buffer = await app.vault.readBinary(file);
+		const hash = await FloppyDiskCrypto.computeHash(buffer);
+
+		await snapshotManager.updateFileSync(action.path, hash);
 	}
 
 	// handle downloads
@@ -207,7 +211,7 @@ export async function executeSync(
 		const snapshot = await snapshotManager.loadSnapshot();
 
 		// ensure file exists in snapshot BEFORE updating
-		snapshotManager.getOrCreateFileId(action.path);
+		await snapshotManager.getOrCreateFileId(action.path);
 		await snapshotManager.updateFileSync(action.path, hash);
 
 		console.warn(`Downloaded: ${action.path}`);

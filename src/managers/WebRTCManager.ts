@@ -308,10 +308,9 @@ export class WebRTCManager {
 				await this.handleFileChunk(msg);
 				break;
 
-			case "FILE_COMPLETE": {
-				await this.tryResolveFile(msg.path);
+			case "FILE_COMPLETE":
+				void this.tryResolveFile(msg.path);
 				break;
-			}
 
 			case "HANDSHAKE":
 				console.log(`[RTC] HANDSHAKE RECEIVED ${id}`);
@@ -541,31 +540,41 @@ export class WebRTCManager {
 		});
 	}
 
-	private async tryResolveFile(path: string) {
+	private async tryResolveFile(path: string): Promise<void> {
 		const buffers = this.fileBuffers.get(path);
 		const total = this.fileChunkTotals.get(path);
 
-		if (!buffers || total === undefined) return;
-
-		// ensure all chunks exist
-		for (let i = 0; i < total; i++) {
-			if (!buffers[i]) return;
+		if (!buffers || total === undefined) {
+			return;
 		}
 
-		const fullLength = buffers.reduce((sum, b) => sum + b.length, 0);
-		const fullBuffer = new Uint8Array(fullLength);
+		// not all chunks received yet
+		if (buffers.filter(Boolean).length !== total) {
+			return;
+		}
+
+		const totalLength = buffers.reduce(
+			(sum, chunk) => sum + chunk.length,
+			0,
+		);
+
+		const fullBuffer = new Uint8Array(totalLength);
 
 		let offset = 0;
+
 		for (const chunk of buffers) {
 			fullBuffer.set(chunk, offset);
 			offset += chunk.length;
 		}
 
-		// resolve requestFile promise if waiting
-		this.fileResolvers.get(path)?.(fullBuffer);
+		// resolve pending request
+		const resolver = this.fileResolvers.get(path);
+
+		if (resolver) {
+			resolver(fullBuffer);
+		}
 
 		// cleanup
-		this.fileResolvers.delete(path);
 		this.fileBuffers.delete(path);
 		this.fileChunkTotals.delete(path);
 	}
@@ -616,60 +625,32 @@ export class WebRTCManager {
 			throw new Error(`No open channel to device ${id}`);
 		}
 
+		// initialize storage
 		this.fileBuffers.set(path, []);
 
 		return new Promise((resolve, reject) => {
 			const timeout = setTimeout(() => {
 				this.fileBuffers.delete(path);
+				this.fileChunkTotals.delete(path);
 				this.fileResolvers.delete(path);
+
 				reject(new Error(`File request timed out: ${path}`));
 			}, 15000);
 
 			// store resolver
 			this.fileResolvers.set(path, (data) => {
 				clearTimeout(timeout);
+
+				this.fileResolvers.delete(path);
+
 				resolve(data);
 			});
 
-			const handleMessage = (event: MessageEvent) => {
-				if (typeof event.data !== "string") return;
-
-				let parsed: unknown;
-
-				try {
-					parsed = JSON.parse(event.data);
-				} catch {
-					return;
-				}
-
-				// CHUNK
-				if (isFileChunkMessage(parsed) && parsed.path === path) {
-					const buffers = this.fileBuffers.get(path)!;
-
-					const binaryString = atob(parsed.data);
-					const bytes = new Uint8Array(binaryString.length);
-
-					for (let i = 0; i < binaryString.length; i++) {
-						bytes[i] = binaryString.charCodeAt(i);
-					}
-
-					buffers[parsed.chunkIndex] = bytes;
-				}
-
-				// COMPLETE → attempt resolve
-				if (isFileCompleteMessage(parsed) && parsed.path === path) {
-					void this.tryResolveFile(path);
-				}
-			};
-
-			channel.addEventListener("message", handleMessage);
-
-			channel.send(
-				JSON.stringify({
-					type: "FILE_REQUEST",
-					path,
-				}),
-			);
+			// ONLY send request
+			this.sendMessage(id, {
+				type: "FILE_REQUEST",
+				path,
+			});
 		});
 	}
 }
